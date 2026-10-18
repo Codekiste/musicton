@@ -22,6 +22,7 @@ mod synth_ui;
 pub mod theme;
 mod transport;
 mod versions_ui;
+mod video_ui;
 mod widgets;
 
 use crate::audio::engine::{Cmd, Status};
@@ -140,6 +141,7 @@ pub struct App {
     rack: rack_ui::RackUiState,
     chord_pads: composition_ui::ChordPadState,
     versions: versions_ui::VersionsState,
+    video: video_ui::VideoState,
     drag: Option<Payload>,
     info: Option<(String, String)>,
     kb_octave: i32,
@@ -243,6 +245,7 @@ impl App {
             rack: Default::default(),
             chord_pads: Default::default(),
             versions: Default::default(),
+            video: Default::default(),
             drag: None,
             info: None,
             kb_octave: 4,
@@ -1476,6 +1479,7 @@ impl eframe::App for App {
         self.chord_pads_window(ctx);
         self.rules_window(ctx);
         self.versions_window(ctx);
+        self.video_window(ctx);
         self.plugin_overlay_ui(ctx);
         self.update_arr_record();
         self.update_audio_record();

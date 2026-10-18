@@ -62,6 +62,19 @@ impl App {
             "transform_clip" => self.cmd_transform(a),
             "add_chord_to_clip" => self.cmd_clip_chord(a),
             "versions" => self.cmd_versions(a),
+            "import_video" => {
+                let Some(path) = s(a, "path") else { return Some(Err("missing 'path'".into())) };
+                let start = bar(a, "start_bar").unwrap_or(0);
+                match super::video_ui::import_blocking(path, start) {
+                    Ok((v, audio)) => {
+                        let (n, d) = (v.frame_count, v.duration);
+                        let had_audio = audio.is_some();
+                        self.apply_video(v, audio);
+                        Ok(json!({ "frames": n, "seconds": d, "audio_track": had_audio }))
+                    }
+                    Err(e) => Err(e),
+                }
+            }
             "export_musicxml" => {
                 let r = match self.clip_ref(a) {
                     Ok(r) => r,

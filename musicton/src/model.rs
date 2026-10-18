@@ -1170,6 +1170,20 @@ pub struct Project {
     pub playlist: Vec<PlaylistBlock>,
     #[serde(default)]
     pub chords: Vec<ChordEvent>,
+    #[serde(default)]
+    pub video: Option<VideoTrack>,
+}
+
+/// A video placed on the timeline (frames are extracted for display).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct VideoTrack {
+    pub path: String,
+    /// Timeline position of the first frame, in steps.
+    pub start: u32,
+    pub duration: f32,
+    /// Folder with the extracted PNG frames.
+    pub frames: String,
+    pub frame_count: u32,
 }
 
 fn default_key() -> u8 {
@@ -1251,6 +1265,7 @@ impl Project {
             chain_on: false,
             playlist: vec![],
             chords: vec![],
+            video: None,
         }
     }
 

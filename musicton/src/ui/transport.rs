@@ -243,6 +243,16 @@ impl App {
             ui.close_menu();
             self.file_save(true);
         }
+        if ui.button("Import Video...").on_hover_text("Puts a video on the timeline (needs ffmpeg) - score to picture").clicked() {
+            ui.close_menu();
+            if let Some(p) = rfd::FileDialog::new().add_filter("Video", &["mp4", "mov", "mkv", "webm", "avi", "m4v"]).pick_file() {
+                self.import_video(p.to_string_lossy().to_string());
+            }
+        }
+        if self.project.video.is_some() && ui.button("Show Video").clicked() {
+            self.video.open = true;
+            ui.close_menu();
+        }
         if ui.button("Versions...").clicked() {
             self.versions.open = true;
             ui.close_menu();

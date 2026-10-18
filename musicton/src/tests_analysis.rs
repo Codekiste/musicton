@@ -111,3 +111,37 @@ fn stems_separate_and_sum_back() {
     assert!(click_win(&st.drums.0) > 5.0, "drum stem should be mostly clicks");
     assert!(e(&st.lead.0) < e(&st.other.0), "the wide pad is not centre material");
 }
+
+#[test]
+fn video_pipeline_with_ffmpeg() {
+    use crate::video;
+    if !video::available() {
+        eprintln!("ffmpeg not installed - skipping");
+        return;
+    }
+    let dir = std::env::temp_dir().join(format!("musicton_video_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let src = dir.join("src.mp4");
+    let ok = std::process::Command::new("ffmpeg")
+        .args(["-y", "-v", "error", "-f", "lavfi", "-i", "testsrc=duration=2:size=320x180:rate=25", "-f", "lavfi", "-i", "sine=frequency=330:duration=2", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest"])
+        .arg(&src)
+        .status()
+        .unwrap()
+        .success();
+    assert!(ok);
+    let s = src.to_string_lossy().to_string();
+    let (dur, audio) = video::probe(&s).unwrap();
+    assert!((dur - 2.0).abs() < 0.2 && audio);
+    let n = video::extract_frames(&s, &dir.join("frames")).unwrap();
+    assert!((14..=18).contains(&n), "frames: {n}");
+    let (w, h, rgba) = video::load_frame(&dir.join("frames").join("00001.png")).unwrap();
+    assert_eq!((w, rgba.len()), (video::FRAME_WIDTH as usize, w * h * 4));
+    let wav = dir.join("a.wav");
+    video::extract_audio(&s, &wav).unwrap();
+    let out = dir.join("out.mp4");
+    video::mux(&s, &wav.to_string_lossy(), 0.5, &out.to_string_lossy()).unwrap();
+    let (d2, a2) = video::probe(&out.to_string_lossy()).unwrap();
+    assert!(a2 && d2 > 1.5, "muxed file: {d2} s, audio {a2}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
