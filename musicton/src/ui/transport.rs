@@ -158,9 +158,9 @@ impl App {
                     self.show_info = !self.show_info;
                 }
                 self.hint(&r, "Help Panel", "Shows or hides this help panel.");
-                let r = widgets::toggle(ui, "Detail", self.show_detail, BLUE, vec2(42.0, 19.0));
+                let r = widgets::toggle(ui, "Detail", self.detail_visible(), BLUE, vec2(42.0, 19.0));
                 if r.clicked() {
-                    self.show_detail = !self.show_detail;
+                    self.toggle_detail();
                 }
                 self.hint(&r, "Editor Panel", "Shows or hides the Clip/Device view at the bottom.");
                 let r = widgets::toggle(ui, "Browser", self.show_browser, BLUE, vec2(54.0, 19.0));
@@ -179,6 +179,11 @@ impl App {
                     self.view = View::Session;
                 }
                 self.hint(&r, "Launcher", "Clip grid for jamming and live performance (Tab).");
+                let r = widgets::toggle(ui, "Mixer", self.view == View::Mixer, TEXT, vec2(46.0, 19.0));
+                if r.clicked() {
+                    self.view = View::Mixer;
+                }
+                self.hint(&r, "Mixer", "Full mixer with channel strips: EQ, inserts, sends, output, pan, faders and meters (Ctrl+M).");
 
                 ui.separator();
                 let cpu = (self.status.cpu * 100.0).min(999.0);

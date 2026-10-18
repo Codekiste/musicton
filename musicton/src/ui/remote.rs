@@ -966,6 +966,7 @@ impl App {
                 match arg_str(a, "view") {
                     Some("session") => self.view = View::Session,
                     Some("arrangement") => self.view = View::Arrangement,
+                    Some("mixer") => self.view = View::Mixer,
                     Some(v) => return Err(format!("unknown view '{v}'")),
                     None => {}
                 }
@@ -984,6 +985,9 @@ impl App {
                             self.sel_scene = s as usize;
                         }
                     }
+                }
+                if let (View::Mixer, Some(v)) = (self.view, arg_bool(a, "detail_view")) {
+                    self.mixer.detail = v;
                 }
                 for (k, flag) in [("browser", &mut self.show_browser), ("info", &mut self.show_info), ("detail_view", &mut self.show_detail)] {
                     if let Some(v) = arg_bool(a, k) {

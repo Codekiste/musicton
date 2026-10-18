@@ -27,18 +27,22 @@ use cpal::{FromSample, SizedSample};
 use crossbeam_channel::{Receiver, Sender};
 use engine::{Cmd, Engine, Status};
 use parking_lot::Mutex;
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::Arc;
 
 pub struct Shared {
     pub project: ArcSwap<Project>,
     pub status: Mutex<Status>,
+    /// Set by the stream's error callback; the UI then reopens the device.
+    pub stream_failed: AtomicBool,
 }
 
 pub struct Audio {
     pub shared: Arc<Shared>,
     pub tx: Sender<Cmd>,
+    rx: Receiver<Cmd>,
     _stream: Option<cpal::Stream>,
+    last_retry: Option<std::time::Instant>,
     pub sample_rate: u32,
     pub device_name: String,
     pub error: Option<String>,
@@ -49,13 +53,42 @@ impl Audio {
         let shared = Arc::new(Shared {
             project: ArcSwap::from_pointee(project.clone()),
             status: Mutex::new(Status::default()),
+            stream_failed: AtomicBool::new(false),
         });
         let (tx, rx) = crossbeam_channel::bounded(4096);
-        match open_stream(shared.clone(), rx) {
-            Ok((stream, sr, name)) => Self { shared, tx, _stream: Some(stream), sample_rate: sr, device_name: name, error: None },
+        match open_stream(shared.clone(), rx.clone()) {
+            Ok((stream, sr, name)) => Self { shared, tx, rx, _stream: Some(stream), last_retry: None, sample_rate: sr, device_name: name, error: None },
             Err(e) => {
                 eprintln!("audio: {e}");
-                Self { shared, tx, _stream: None, sample_rate: 48000, device_name: "none".into(), error: Some(e) }
+                Self { shared, tx, rx, _stream: None, last_retry: None, sample_rate: 48000, device_name: "none".into(), error: Some(e) }
+            }
+        }
+    }
+
+    /// Reopens the output after the device failed (sound server restart, interface unplugged).
+    /// Retries every two seconds; returns a message when the state changed.
+    pub fn recover(&mut self) -> Option<String> {
+        if !self.shared.stream_failed.load(Ordering::Relaxed) {
+            return None;
+        }
+        if self.last_retry.is_some_and(|t| t.elapsed() < std::time::Duration::from_secs(2)) {
+            return None;
+        }
+        self.last_retry = Some(std::time::Instant::now());
+        let first = self._stream.is_some();
+        self._stream = None;
+        match open_stream(self.shared.clone(), self.rx.clone()) {
+            Ok((stream, sr, name)) => {
+                self.shared.stream_failed.store(false, Ordering::Relaxed);
+                self._stream = Some(stream);
+                self.sample_rate = sr;
+                self.device_name = name;
+                self.error = None;
+                Some(format!("Audio output reconnected: {}", self.device_name))
+            }
+            Err(e) => {
+                self.error = Some(e.clone());
+                first.then(|| format!("Audio output lost ({e}) - retrying"))
             }
         }
     }
@@ -89,10 +122,10 @@ fn open_stream(shared: Arc<Shared>, rx: Receiver<Cmd>) -> Result<(cpal::Stream, 
         let mut cfg = config.clone();
         cfg.buffer_size = buffer;
         let res = match format {
-            cpal::SampleFormat::F32 => build::<f32>(&device, &cfg, make_engine()),
-            cpal::SampleFormat::I16 => build::<i16>(&device, &cfg, make_engine()),
-            cpal::SampleFormat::I32 => build::<i32>(&device, &cfg, make_engine()),
-            cpal::SampleFormat::U16 => build::<u16>(&device, &cfg, make_engine()),
+            cpal::SampleFormat::F32 => build::<f32>(&device, &cfg, make_engine(), shared.clone()),
+            cpal::SampleFormat::I16 => build::<i16>(&device, &cfg, make_engine(), shared.clone()),
+            cpal::SampleFormat::I32 => build::<i32>(&device, &cfg, make_engine(), shared.clone()),
+            cpal::SampleFormat::U16 => build::<u16>(&device, &cfg, make_engine(), shared.clone()),
             other => return Err(format!("unsupported sample format {other:?}")),
         };
         match res {
@@ -110,6 +143,7 @@ fn build<T: SizedSample + FromSample<f32>>(
     device: &cpal::Device,
     config: &cpal::StreamConfig,
     mut engine: Engine,
+    shared: Arc<Shared>,
 ) -> Result<cpal::Stream, String> {
     let channels = config.channels as usize;
     let mut buf: Vec<f32> = vec![0.0; 8192];
@@ -136,7 +170,12 @@ fn build<T: SizedSample + FromSample<f32>>(
                     }
                 }
             },
-            |e| eprintln!("audio stream error: {e}"),
+            move |e| {
+                // A dead device reports the same error in a tight loop: log it once and let the UI reopen it.
+                if !shared.stream_failed.swap(true, Ordering::Relaxed) {
+                    eprintln!("audio stream error: {e}");
+                }
+            },
             None,
         )
         .map_err(|e| e.to_string())

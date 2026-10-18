@@ -5,7 +5,11 @@ Das B-303-Plugin hat einen eigenen Changelog: [b303-plugin/CHANGELOG.md](b303-pl
 
 ## [Unreleased]
 
+### Hinzugefügt
+- Mixer-Ansicht (Button „Mixer“, Strg+M): Kanalzüge in voller Höhe mit EQ-Anzeige, Instrument, Insert-Slots (Bypass, Reihenfolge, Entfernen, Hinzufügen), Send-Reglern, Output-Routing, Pan, großem Fader mit dB-Skala, Stereo-Meter mit Peak-Hold, Peak-Anzeige, Mute/Solo/Record und Spurname in Spurfarbe; Bereiche einzeln ein- und ausblendbar; per MCP mit `set_view view=mixer`
+
 ### Behoben
+- Bricht die Audioausgabe ab (Soundserver-Neustart, Interface getrennt), verbindet sich Musicton automatisch neu, statt die Fehlermeldung endlos ins Log zu schreiben
 - VST3-Plug-ins mit getrenntem Controller (z. B. Surge XT) zeigen ihren Editor: Component und Controller werden über Connection Points verbunden, der Host stellt Nachrichten (IMessage/IAttributeList) bereit
 - Das Modulator-Panel dehnt sich nicht mehr über die ganze Device Chain aus
 - Entfernte oder ersetzte Plug-ins beenden ihren Sandbox-Prozess (vorher liefen die Prozesse bis zum Programmende weiter)

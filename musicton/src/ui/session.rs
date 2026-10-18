@@ -661,7 +661,7 @@ impl App {
     }
 
     /// Track output routing: master, a return, or any other track (groups, resampling, buses).
-    fn output_combo(&mut self, ui: &mut egui::Ui, id: u64) {
+    pub(super) fn output_combo(&mut self, ui: &mut egui::Ui, id: u64) {
         let Some(t) = self.project.track(id) else { return };
         let name_of = |o: Output, p: &Project| match o {
             Output::Master => "Master".to_string(),

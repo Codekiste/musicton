@@ -10,6 +10,7 @@ mod devices;
 mod export;
 mod instruments_ui;
 mod mapping;
+mod mixer;
 mod pads_ui;
 mod plugin_ui;
 mod plugins_ui;
@@ -43,6 +44,7 @@ use theme::*;
 pub enum View {
     Session,
     Arrangement,
+    Mixer,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -143,6 +145,7 @@ pub struct App {
     sel_scene: usize,
     sel_device: Option<u64>,
     rack: rack_ui::RackUiState,
+    mixer: mixer::MixerState,
     chord_pads: composition_ui::ChordPadState,
     versions: versions_ui::VersionsState,
     video: video_ui::VideoState,
@@ -248,6 +251,7 @@ impl App {
             sel_scene: 0,
             sel_device: None,
             rack: Default::default(),
+            mixer: Default::default(),
             chord_pads: Default::default(),
             versions: Default::default(),
             video: Default::default(),
@@ -396,6 +400,23 @@ impl App {
             ClipRef::Arr { track, id } => {
                 self.project.track_mut(track)?.arrangement.iter_mut().find(|c| c.id == id).map(|c| &mut c.clip)
             }
+        }
+    }
+
+    /// The mixer keeps its faders tall: the editor panel only opens there on demand.
+    pub(super) fn detail_visible(&self) -> bool {
+        if self.view == View::Mixer {
+            self.mixer.detail
+        } else {
+            self.show_detail
+        }
+    }
+
+    pub(super) fn toggle_detail(&mut self) {
+        if self.view == View::Mixer {
+            self.mixer.detail = !self.mixer.detail;
+        } else {
+            self.show_detail = !self.show_detail;
         }
     }
 
@@ -1101,8 +1122,12 @@ impl App {
         if ctx.wants_keyboard_input() {
             return;
         }
+        let mixer_key = ctx.input_mut(|i| i.consume_key(Modifiers::COMMAND, Key::M));
         if tab {
             self.view = if self.view == View::Session { View::Arrangement } else { View::Session };
+        }
+        if mixer_key {
+            self.view = if self.view == View::Mixer { View::Session } else { View::Mixer };
         }
         if shift_tab {
             self.detail = if self.detail == Detail::Clip { Detail::Devices } else { Detail::Clip };
@@ -1325,7 +1350,7 @@ impl App {
         let (title, body) = self.info.clone().unwrap_or_else(|| {
             (
                 "Help Panel".into(),
-                "Hover over any control to see what it does.\n\nTab: Launcher/Timeline\nShift+Tab: Clip/Device view\nSpace: Play/Stop\nA-K row: play notes, Z/X octave\nCtrl+Z/Y: Undo/Redo".into(),
+                "Hover over any control to see what it does.\n\nTab: Launcher/Timeline\nCtrl+M: Mixer\nShift+Tab: Clip/Device view\nSpace: Play/Stop\nA-K row: play notes, Z/X octave\nCtrl+Z/Y: Undo/Redo".into(),
             )
         });
         ui.label(egui::RichText::new(title).strong().size(12.5));
@@ -1423,6 +1448,9 @@ impl eframe::App for App {
         self.deliver_screenshots(ctx);
         self.poll_remote(ctx);
         self.poll_jobs();
+        if let Some(msg) = self.audio.recover() {
+            self.toast(msg);
+        }
         self.read_status();
         self.poll_midi();
         self.handle_keys(ctx);
@@ -1446,7 +1474,7 @@ impl eframe::App for App {
                 .show(ctx, |ui| self.browser_panel(ui));
         }
 
-        if self.show_detail {
+        if self.detail_visible() {
             egui::TopBottomPanel::bottom("detail")
                 .resizable(true)
                 .default_height(290.0)
@@ -1478,6 +1506,7 @@ impl eframe::App for App {
             .show(ctx, |ui| match self.view {
                 View::Session => self.session_view(ui),
                 View::Arrangement => self.arrangement_view(ui),
+                View::Mixer => self.mixer_view(ui),
             });
 
         self.export_window(ctx);
