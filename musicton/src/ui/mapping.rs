@@ -18,7 +18,7 @@ impl App {
         match t {
             MapTarget::Volume(id) => format!("{} Volume", track_name(id)),
             MapTarget::Pan(id) => format!("{} Pan", track_name(id)),
-            MapTarget::Send(id, k) => format!("{} Send {}", track_name(id), ["A", "B"][(k as usize).min(1)]),
+            MapTarget::Send(id, k) => format!("{} Send {}", track_name(id), return_letter(k as usize)),
             MapTarget::Mute(id) => format!("{} Activator", track_name(id)),
             MapTarget::Solo(id) => format!("{} Solo", track_name(id)),
             MapTarget::Instrument(id, i) => {
@@ -68,7 +68,7 @@ impl App {
         Some(match t {
             MapTarget::Volume(id) => p.track(id)?.channel.volume,
             MapTarget::Pan(id) => (p.track(id)?.channel.pan + 1.0) / 2.0,
-            MapTarget::Send(id, k) => p.track(id)?.channel.sends[(k as usize).min(1)],
+            MapTarget::Send(id, k) => *p.track(id)?.channel.sends.get(k as usize)?,
             MapTarget::Mute(id) => if p.track(id)?.channel.mute { 0.0 } else { 1.0 },
             MapTarget::Solo(id) => if p.track(id)?.channel.solo { 1.0 } else { 0.0 },
             MapTarget::Instrument(id, i) => {
@@ -107,7 +107,9 @@ impl App {
             }
             MapTarget::Send(id, k) => {
                 if let Some(tr) = self.project.track_mut(id) {
-                    tr.channel.sends[(k as usize).min(1)] = v;
+                    if let Some(s) = tr.channel.sends.get_mut(k as usize) {
+                        *s = v;
+                    }
                 }
             }
             MapTarget::Mute(id) => {
@@ -384,8 +386,15 @@ impl App {
                             let Some(mut clip) = self.clip(ClipRef::Session { track: ts.id, scene }).cloned() else { continue };
                             clip.follow = None;
                             let id = self.project.new_id();
+                            let lane_id = self.project.new_id();
                             if let Some(t) = self.project.track_mut(ts.id) {
-                                t.arrangement.retain(|c| c.start + c.len <= pos || c.start > pos + 4096);
+                                // Recorded-over clips are kept on a take lane for comping.
+                                let (keep, old): (Vec<ArrClip>, Vec<ArrClip>) = t.arrangement.drain(..).partition(|c| c.start + c.len <= pos || c.start > pos + 4096);
+                                t.arrangement = keep;
+                                if !old.is_empty() {
+                                    let n = t.takes.len() + 1;
+                                    t.takes.push(TakeLane { id: lane_id, name: format!("Take {n}"), clips: old });
+                                }
                                 t.arrangement.push(ArrClip { id, start: pos, len: 1, clip });
                             }
                             self.rec_segments.insert(ts.id, (id, scene, pos));

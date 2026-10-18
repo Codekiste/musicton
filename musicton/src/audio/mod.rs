@@ -239,6 +239,40 @@ pub fn export_stems(project: Project, source: ExportSource, sr: u32, depth: BitD
     ExportJob { progress, result }
 }
 
+/// Renders `steps` of the timeline (from step 0) plus `tail` seconds into interleaved stereo.
+pub fn render_buffer(mut project: Project, steps: u32, tail: f64, sr: u32) -> Vec<f32> {
+    project.loop_on = false;
+    let step_secs = 60.0 / project.bpm as f64 / 4.0;
+    let music_end = (steps as f64 * step_secs * sr as f64) as usize;
+    let total = music_end + (tail * sr as f64) as usize;
+    let _plugins = plugbridge::OfflineGuard::new();
+    let mut engine = Engine::new(sr as f32, Arc::new(project));
+    engine.handle(Cmd::Play);
+    let mut out = vec![0.0f32; total * 2];
+    let mut pos = 0;
+    let mut stopped = false;
+    while pos < total {
+        let n = 512.min(total - pos);
+        if !stopped && pos >= music_end {
+            engine.handle(Cmd::Stop);
+            stopped = true;
+        }
+        engine.process(&mut out[pos * 2..(pos + n) * 2]);
+        pos += n;
+    }
+    out
+}
+
+/// Writes interleaved stereo as a 32-bit float WAV.
+pub fn write_wav(path: &std::path::Path, data: &[f32], sr: u32) -> Result<(), String> {
+    let spec = hound::WavSpec { channels: 2, sample_rate: sr, bits_per_sample: 32, sample_format: hound::SampleFormat::Float };
+    let mut w = hound::WavWriter::create(path, spec).map_err(|e| e.to_string())?;
+    for s in data {
+        w.write_sample(*s).map_err(|e| e.to_string())?;
+    }
+    w.finalize().map_err(|e| e.to_string())
+}
+
 fn render_to_file(
     mut project: Project,
     source: ExportSource,

@@ -17,7 +17,7 @@ const MIXER_H: f32 = 232.0;
 impl App {
     pub(super) fn session_view(&mut self, ui: &mut egui::Ui) {
         let n = self.visible_tracks().len();
-        let width = n as f32 * COL_W + DROP_W + 2.0 * COL_W + MASTER_W;
+        let width = n as f32 * COL_W + DROP_W + self.project.returns.len() as f32 * COL_W + MASTER_W;
         egui::ScrollArea::horizontal().drag_to_scroll(false).id_salt("session_h").auto_shrink([false, false]).show(ui, |ui| {
             ui.set_min_width(width);
             ui.spacing_mut().item_spacing = vec2(0.0, 0.0);
@@ -49,7 +49,7 @@ impl App {
     }
 
     fn master_x(&self, rect: Rect) -> f32 {
-        rect.left() + self.visible_tracks().len() as f32 * COL_W + DROP_W + 2.0 * COL_W
+        rect.left() + self.visible_tracks().len() as f32 * COL_W + DROP_W + self.project.returns.len() as f32 * COL_W
     }
 
     fn session_headers(&mut self, ui: &mut egui::Ui, rect: Rect) {
@@ -59,7 +59,7 @@ impl App {
             self.track_header(ui, r, id);
         }
         let n = ids.len();
-        for k in 0..2 {
+        for k in 0..self.project.returns.len() {
             let r = Rect::from_min_size(pos2(self.col_x(rect, n + k), rect.top()), vec2(COL_W - 1.0, HEADER_H));
             let rt = &self.project.returns[k];
             let col = color32(rt.color);
@@ -71,10 +71,11 @@ impl App {
                 self.sel = Sel::Return(k);
                 self.detail = Detail::Devices;
             }
+            resp.context_menu(|ui| self.return_menu(ui, k));
             if let Some(Payload::Device(kind)) = self.drop_target(ui, r, |p| matches!(p, Payload::Device(_))) {
                 self.add_device(Sel::Return(k), kind, None);
             }
-            self.hint(&resp, "Return Track", "Return tracks receive signal from the Send knobs of every track. Click to edit its effects.");
+            self.hint(&resp, "Return Track", "Return tracks receive signal from the Send knobs of every track. Click to edit its effects, right-click to add or delete return tracks.");
         }
         let r = Rect::from_min_size(pos2(self.master_x(rect), rect.top()), vec2(MASTER_W, HEADER_H));
         let col = Color32::from_rgb(0xff, 0x66, 0xc4);
@@ -101,7 +102,9 @@ impl App {
         let is_group = t.instrument.kind == InstrumentKind::Group;
         let folded = t.folded;
         let group_color = t.group.and_then(|g| self.project.track(g)).map(|g| color32(g.color));
-        let txt = if is_group { format!("{} {name}", if folded { "▶" } else { "▼" }) } else { format!("{} {}", idx + 1, name) };
+        let icon = if t.icon.is_empty() { String::new() } else { format!("{} ", t.icon) };
+        let flags = format!("{}{}", if t.frozen.is_some() { " ❄" } else { "" }, if t.locked { " 🔒" } else { "" });
+        let txt = if is_group { format!("{} {icon}{name}{flags}", if folded { "▶" } else { "▼" }) } else { format!("{} {icon}{name}{flags}", idx + 1) };
         if is_group {
             let tri = Rect::from_min_size(r.min, vec2(18.0, r.height()));
             let tr = ui.interact(tri, ui.id().with(("fold", id)), Sense::click());
@@ -161,75 +164,6 @@ impl App {
             }
             _ => {}
         }
-    }
-
-    pub(super) fn track_menu(&mut self, ui: &mut egui::Ui, id: u64) {
-        if ui.button("Rename").clicked() {
-            let name = self.project.track(id).map(|t| t.name.clone()).unwrap_or_default();
-            self.renaming = Some((RenameTarget::Track(id), name));
-            ui.close_menu();
-        }
-        if ui.button("Duplicate Track").clicked() {
-            self.duplicate_track(id);
-            ui.close_menu();
-        }
-        let (is_group, in_group) = self.project.track(id).map(|t| (t.instrument.kind == InstrumentKind::Group, t.group.is_some())).unwrap_or((false, false));
-        if is_group {
-            if ui.button("Ungroup Tracks").clicked() {
-                self.ungroup(id);
-                ui.close_menu();
-            }
-        } else if in_group {
-            if ui.button("Remove from Group").clicked() {
-                if let Some(t) = self.project.track_mut(id) {
-                    t.group = None;
-                }
-                self.touch();
-                ui.close_menu();
-            }
-        } else {
-            if ui.button("Group Track   (Ctrl+G)").clicked() {
-                self.group_track(id);
-                ui.close_menu();
-            }
-            let groups: Vec<(u64, String)> = self.project.tracks.iter().filter(|t| t.instrument.kind == InstrumentKind::Group).map(|t| (t.id, t.name.clone())).collect();
-            if !groups.is_empty() {
-                ui.menu_button("Move into Group", |ui| {
-                    for (gid, gname) in groups {
-                        if ui.button(gname).clicked() {
-                            self.move_into_group(id, gid);
-                            ui.close_menu();
-                        }
-                    }
-                });
-            }
-        }
-        if ui.button("Delete Track").clicked() {
-            self.delete_track(id);
-            ui.close_menu();
-        }
-        ui.separator();
-        ui.label("Color");
-        ui.horizontal_wrapped(|ui| {
-            ui.set_max_width(8.0 * 18.0);
-            for c in CLIP_COLORS {
-                if widgets::color_swatch(ui, color32(c), false).clicked() {
-                    if let Some(t) = self.project.track_mut(id) {
-                        t.color = c;
-                        for clip in t.clips.iter_mut().flatten() {
-                            clip.color = c;
-                        }
-                        for ac in &mut t.arrangement {
-                            ac.clip.color = c;
-                        }
-                    }
-                    self.touch();
-                    ui.close_menu();
-                }
-            }
-        });
-        ui.separator();
-        self.add_track_menu_items(ui);
     }
 
     fn add_track_menu_items(&mut self, ui: &mut egui::Ui) {
@@ -332,7 +266,7 @@ impl App {
             _ => {}
         }
         // Return columns are empty in the clip grid.
-        for k in 0..2 {
+        for k in 0..self.project.returns.len() {
             let x = self.col_x(rect, n + k);
             for si in 0..n_scenes {
                 let r = Rect::from_min_size(pos2(x, rect.top() + si as f32 * SLOT_H), vec2(COL_W - 1.0, SLOT_H - 1.0));
@@ -393,7 +327,7 @@ impl App {
         let hover_btn = resp.hover_pos().is_some_and(|pos| btn.contains(pos));
         match &clip {
             Some(c) => {
-                let col = color32(c.color);
+                let col = if c.muted { Color32::from_rgb(0x6a, 0x6a, 0x6a) } else { color32(c.color) };
                 p.rect_filled(r, 0.0, if playing { col } else { darken(col, 0.8) });
                 let tri_col = if playing {
                     PLAY
@@ -463,43 +397,7 @@ impl App {
         }
         let has_clip = clip.is_some();
         resp.context_menu(|ui| {
-            if has_clip {
-                if ui.button("Launch").clicked() {
-                    self.send(Cmd::Launch { track, scene });
-                    ui.close_menu();
-                }
-                if ui.button("Rename").clicked() {
-                    let name = self.clip(ClipRef::Session { track, scene }).map(|c| c.name.clone()).unwrap_or_default();
-                    self.renaming = Some((RenameTarget::Clip(ClipRef::Session { track, scene }), name));
-                    ui.close_menu();
-                }
-                if ui.button("Duplicate   (Ctrl+D)").clicked() {
-                    self.sel_clip = Some(ClipRef::Session { track, scene });
-                    self.duplicate_selected_clip();
-                    ui.close_menu();
-                }
-                if ui.button("Delete   (Del)").clicked() {
-                    self.sel_clip = Some(ClipRef::Session { track, scene });
-                    self.delete_selected_clip();
-                    ui.close_menu();
-                }
-                ui.separator();
-                ui.horizontal_wrapped(|ui| {
-                    ui.set_max_width(8.0 * 18.0);
-                    for c in CLIP_COLORS {
-                        if widgets::color_swatch(ui, color32(c), false).clicked() {
-                            if let Some(clip) = self.clip_mut(ClipRef::Session { track, scene }) {
-                                clip.color = c;
-                            }
-                            self.touch();
-                            ui.close_menu();
-                        }
-                    }
-                });
-            } else if ui.button("Insert MIDI Clip").clicked() {
-                self.new_empty_clip(track, scene);
-                ui.close_menu();
-            }
+            self.session_clip_menu(ui, track, scene);
             ui.separator();
             if has_clip {
                 self.map_menu(ui, MapTarget::LaunchClip(track, scene), None);
@@ -652,7 +550,7 @@ impl App {
             self.mixer_strip(ui, r, Sel::Track(id), i + 1);
         }
         let n = ids.len();
-        for k in 0..2 {
+        for k in 0..self.project.returns.len() {
             let r = Rect::from_min_size(pos2(self.col_x(rect, n + k), rect.top()), vec2(COL_W - 1.0, rect.height()));
             self.mixer_strip(ui, r, Sel::Return(k), k);
         }
@@ -665,13 +563,13 @@ impl App {
         let Some(t) = self.project.track(id) else { return };
         let name_of = |o: Output, p: &Project| match o {
             Output::Master => "Master".to_string(),
-            Output::Return(k) => format!("Ret {}", ["A", "B"][(k as usize).min(1)]),
+            Output::Return(k) => format!("Ret {}", return_letter(k as usize)),
             Output::Track(tid) => p.track(tid).map(|t| t.name.clone()).unwrap_or_else(|| "?".into()),
         };
         let cur = t.output;
         let mut new = cur;
-        let options: Vec<(Output, String)> = [Output::Master, Output::Return(0), Output::Return(1)]
-            .into_iter()
+        let options: Vec<(Output, String)> = std::iter::once(Output::Master)
+            .chain((0..self.project.returns.len()).map(|k| Output::Return(k as u8)))
             .chain(self.project.tracks.iter().filter(|x| x.id != id).map(|x| Output::Track(x.id)))
             .map(|o| (o, name_of(o, &self.project)))
             .collect();
@@ -732,14 +630,16 @@ impl App {
                         }
                     });
                     ui.horizontal(|ui| {
-                        let r1 = widgets::send_knob(ui, &mut ch.sends[0], "A");
-                        let r2 = widgets::send_knob(ui, &mut ch.sends[1], "B");
-                        if let Sel::Track(id) = sel {
-                            r1.context_menu(|ui| self.map_menu(ui, MapTarget::Send(id, 0), Some(id)));
-                            r2.context_menu(|ui| self.map_menu(ui, MapTarget::Send(id, 1), Some(id)));
+                        // Up to four sends fit in the strip; the Mixer view shows all.
+                        let names: Vec<String> = self.project.returns.iter().map(|r| r.name.clone()).collect();
+                        for (k, name) in names.iter().enumerate().take(4) {
+                            let letter = return_letter(k).to_string();
+                            let rk = widgets::send_knob(ui, &mut ch.sends[k], &letter);
+                            if let Sel::Track(id) = sel {
+                                rk.context_menu(|ui| self.map_menu(ui, MapTarget::Send(id, k as u8), Some(id)));
+                            }
+                            self.hint(&rk, &format!("Send {letter}"), &format!("How much of this track goes to the return track {name}."));
                         }
-                        self.hint(&r1, "Send A", "How much of this track goes to Return A (reverb by default).");
-                        self.hint(&r2, "Send B", "How much of this track goes to Return B (delay by default).");
                     });
                 } else {
                     ui.add_space(48.0);
@@ -786,7 +686,7 @@ impl App {
                     ui.vertical(|ui| {
                         if sel != Sel::Master {
                             let label = match sel {
-                                Sel::Return(k) => ["A", "B"][k].to_string(),
+                                Sel::Return(k) => return_letter(k).to_string(),
                                 _ => number.to_string(),
                             };
                             let ra = widgets::toggle(ui, &label, !ch.mute, ACCENT, vec2(30.0, 20.0));

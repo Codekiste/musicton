@@ -32,21 +32,21 @@ pub struct ArrState {
     pub targets: HashMap<u64, AutoTarget>,
     pub follow: bool,
     pub ext: ArrangerState,
+    /// Extra selected timeline clips (Ctrl-click, Select All Clips): (track, clip id).
+    pub multi: std::collections::HashSet<(u64, u64)>,
+    /// Timeline step where the last clip menu was opened (split point).
+    pub menu_step: u32,
 }
 
 impl Default for ArrState {
     fn default() -> Self {
-        Self { pps: 4.0, scroll_x: 0.0, scroll_y: 0.0, drag: None, targets: HashMap::new(), follow: true, ext: ArrangerState::default() }
+        Self { pps: 4.0, scroll_x: 0.0, scroll_y: 0.0, drag: None, targets: HashMap::new(), follow: true, ext: ArrangerState::default(), multi: Default::default(), menu_step: 0 }
     }
 }
 
 pub fn auto_targets(p: &Project, t: &Track) -> Vec<(AutoTarget, String)> {
-    let mut v = vec![
-        (AutoTarget::Volume, "Mixer: Volume".to_string()),
-        (AutoTarget::Pan, "Mixer: Pan".to_string()),
-        (AutoTarget::Send(0), format!("Mixer: Send {}", p.returns[0].name)),
-        (AutoTarget::Send(1), format!("Mixer: Send {}", p.returns[1].name)),
-    ];
+    let mut v = vec![(AutoTarget::Volume, "Mixer: Volume".to_string()), (AutoTarget::Pan, "Mixer: Pan".to_string())];
+    v.extend(p.returns.iter().enumerate().map(|(k, r)| (AutoTarget::Send(k as u8), format!("Mixer: Send {}", r.name))));
     let defs = t.instrument.kind.defs();
     let limit = if t.instrument.kind == InstrumentKind::Drums { 2 } else { defs.len() };
     for (i, d) in defs.iter().enumerate().take(limit) {
@@ -69,7 +69,7 @@ fn base_norm(t: &Track, target: AutoTarget) -> f32 {
     match target {
         AutoTarget::Volume => t.channel.volume,
         AutoTarget::Pan => (t.channel.pan + 1.0) / 2.0,
-        AutoTarget::Send(k) => t.channel.sends[(k as usize).min(1)],
+        AutoTarget::Send(k) => t.channel.sends.get(k as usize).copied().unwrap_or(0.0),
         AutoTarget::Instrument(i) => t.instrument.kind.defs().get(i).map(|d| d.to_norm(t.instrument.params[i])).unwrap_or(0.5),
         AutoTarget::Device { id, param } => t
             .channel
@@ -150,17 +150,29 @@ impl App {
         p.rect_filled(full, 0.0, PANEL_DARK);
 
         // Rows.
-        let ids: Vec<u64> = self.project.tracks.iter().map(|t| t.id).collect();
+        let ids: Vec<u64> = self.arr_track_ids();
         let mut rows = vec![];
         let mut y = lanes.top() - self.arr.scroll_y;
+        // Row kinds: 0 = clips, 1 = automation, 2.. = take lanes.
         for &id in &ids {
-            rows.push((id, false, y));
+            rows.push((id, 0usize, y));
             y += LANE_H;
             if self.auto_open.contains(&id) {
-                rows.push((id, true, y));
+                rows.push((id, 1, y));
                 y += AUTO_H;
             }
+            if let Some(t) = self.project.track(id).filter(|t| t.show_takes) {
+                for i in 0..t.takes.len() {
+                    rows.push((id, 2 + i, y));
+                    y += super::takes::TAKE_H;
+                }
+            }
         }
+        let row_h = |kind: usize| match kind {
+            0 => LANE_H,
+            1 => AUTO_H,
+            _ => super::takes::TAKE_H,
+        };
         let content_bottom = y;
         let max_scroll = (content_bottom + self.arr.scroll_y - lanes.bottom() + 40.0).max(0.0);
         self.arr.scroll_y = self.arr.scroll_y.min(max_scroll);
@@ -190,33 +202,33 @@ impl App {
             rows.clear();
         }
         // Lanes.
-        for &(id, is_auto, y) in &rows {
-            let row = Rect::from_min_size(pos2(lanes.left(), y), vec2(lanes.width(), if is_auto { AUTO_H } else { LANE_H }));
+        for &(id, kind, y) in &rows {
+            let row = Rect::from_min_size(pos2(lanes.left(), y), vec2(lanes.width(), row_h(kind)));
             if row.bottom() < lanes.top() || row.top() > lanes.bottom() {
                 continue;
             }
             lp.line_segment([row.left_bottom(), row.right_bottom()], Stroke::new(1.0_f32, LINE));
-            if is_auto {
-                self.automation_lane(ui, row, lanes, id);
-            } else {
-                self.clip_lane(ui, row, lanes, id);
+            match kind {
+                0 => self.clip_lane(ui, row, lanes, id),
+                1 => self.automation_lane(ui, row, lanes, id),
+                k => self.take_lane(ui, row, lanes, id, k - 2),
             }
         }
 
         // Headers (drawn on top of the lane area's left side).
         let hp = p.with_clip_rect(headers);
         hp.rect_filled(headers, 0.0, PANEL);
-        for &(id, is_auto, y) in &rows {
-            let r = Rect::from_min_size(pos2(headers.left(), y), vec2(HEADER_W - 2.0, if is_auto { AUTO_H } else { LANE_H } - 1.0));
+        for &(id, kind, y) in &rows {
+            let r = Rect::from_min_size(pos2(headers.left(), y), vec2(HEADER_W - 2.0, row_h(kind) - 1.0));
             if r.bottom() < headers.top() || r.top() > headers.bottom() {
                 continue;
             }
             ui.scope_builder(UiBuilder::new().max_rect(r.intersect(headers)), |ui| {
                 ui.set_clip_rect(headers);
-                if is_auto {
-                    self.automation_header(ui, r, id);
-                } else {
-                    self.arr_track_header(ui, r, id);
+                match kind {
+                    0 => self.arr_track_header(ui, r, id),
+                    1 => self.automation_header(ui, r, id),
+                    k => self.take_header(ui, r, id, k - 2),
                 }
             });
         }
@@ -374,7 +386,20 @@ impl App {
         let name = t.name.clone();
         let (mute, solo) = (t.channel.mute, t.channel.solo);
         let idx = self.project.track_index(id).unwrap_or(0) + 1;
-        ui.painter().text(r.left_top() + vec2(10.0, 5.0), Align2::LEFT_TOP, &name, FontId::proportional(12.0), TEXT);
+        let (frozen, locked, hidden, info, is_audio, armed, show_takes, n_takes, is_group) =
+            (t.frozen.is_some(), t.locked, t.hidden, t.info.clone(), t.instrument.kind == InstrumentKind::Audio, t.arm, t.show_takes, t.takes.len(), t.instrument.kind == InstrumentKind::Group);
+        let title = if t.icon.is_empty() { name.clone() } else { format!("{} {name}", t.icon) };
+        let mut flags = String::new();
+        if frozen {
+            flags.push_str(" ❄");
+        }
+        if locked {
+            flags.push_str(" 🔒");
+        }
+        if hidden {
+            flags.push_str(" (hidden)");
+        }
+        ui.painter().with_clip_rect(r).text(r.left_top() + vec2(10.0, 5.0), Align2::LEFT_TOP, format!("{title}{flags}"), FontId::proportional(12.0), if frozen { Color32::from_rgb(0x9c, 0xd8, 0xff) } else { TEXT });
         let follow = self.track_status(id).is_none_or(|s| s.follow_arr);
         if !follow {
             ui.painter().text(r.left_top() + vec2(10.0, 21.0), Align2::LEFT_TOP, "playing Launcher", FontId::proportional(9.5), ACCENT);
@@ -405,6 +430,68 @@ impl App {
                 self.hint(&rau, "Automation Lane", "Shows the automation lane for this track. Draw breakpoints to change volume, pan, sends or any device parameter over time.");
             });
         });
+        // Configurable header buttons (right-click a track > View > Configure Track Header).
+        let cfg = self.header_cfg;
+        let mut act: Option<&str> = None;
+        ui.scope_builder(UiBuilder::new().max_rect(Rect::from_min_size(pos2(r.left() + 8.0, r.bottom() - 24.0), vec2(r.width() - 96.0, 22.0))), |ui| {
+            ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = 2.0;
+                if cfg.freeze && !is_group {
+                    let b = widgets::toggle(ui, "❄", frozen, Color32::from_rgb(0x9c, 0xd8, 0xff), vec2(20.0, 18.0));
+                    if b.clicked() {
+                        act = Some("freeze");
+                    }
+                    self.hint(&b, "Freeze", "Renders the track to audio to save CPU; click again to unfreeze and edit it.");
+                }
+                if cfg.protect {
+                    let b = widgets::toggle(ui, "🔒", locked, ACCENT, vec2(20.0, 18.0));
+                    if b.clicked() {
+                        act = Some("protect");
+                    }
+                    self.hint(&b, "Protect", "Locks the track against edits (clips, devices, deleting).");
+                }
+                if cfg.hide {
+                    let b = widgets::toggle(ui, "H", hidden, TEXT_DIM, vec2(20.0, 18.0));
+                    if b.clicked() {
+                        act = Some("hide");
+                    }
+                    self.hint(&b, "Hide", "Hides the track from the views (it keeps playing). Show hidden tracks from any track's View menu.");
+                }
+                if cfg.arm && is_audio {
+                    let b = widgets::toggle(ui, "●", armed, REC, vec2(20.0, 18.0));
+                    if b.clicked() {
+                        act = Some("arm");
+                    }
+                    self.hint(&b, "Record Arm", "Arms this audio track for recording from the audio input.");
+                }
+                if cfg.takes && n_takes > 0 {
+                    let b = widgets::toggle(ui, "T", show_takes, BLUE, vec2(20.0, 18.0));
+                    if b.clicked() {
+                        act = Some("takes");
+                    }
+                    self.hint(&b, "Take Lanes", "Shows the alternative recordings of this track for comping.");
+                }
+            });
+        });
+        match act {
+            Some("freeze") => {
+                let r = if frozen { self.unfreeze_track(id) } else { self.freeze_track(id) };
+                match r {
+                    Ok(m) => self.toast(m),
+                    Err(e) => self.toast(format!("Not possible: {e}")),
+                }
+            }
+            Some("protect") => self.set_track_locked(id, !locked),
+            Some("hide") => self.set_track_hidden(id, !hidden),
+            Some("arm") => self.toggle_arm(id),
+            Some("takes") => {
+                if let Some(t) = self.project.track_mut(id) {
+                    t.show_takes = !t.show_takes;
+                }
+                self.touch();
+            }
+            _ => {}
+        }
         if new_mute != mute || new_solo != solo {
             if let Some(t) = self.project.track_mut(id) {
                 t.channel.mute = new_mute;
@@ -420,7 +507,12 @@ impl App {
         if let Some(p) = self.drop_target(ui, r, |p| matches!(p, Payload::Device(_) | Payload::MidiFx(_) | Payload::Instrument(_) | Payload::Plugin(_))) {
             self.drop_on_track(id, p);
         }
-        self.hint(&resp, &name, "Track header. Click to select, right-click for options. Drop effects or instruments here.");
+        let body = if info.is_empty() {
+            "Track header. Click to select, right-click for options. Drop effects or instruments here.".to_string()
+        } else {
+            format!("{info}\n\n(Info text - right-click > Edit Info Text to change it.)")
+        };
+        self.hint(&resp, &name, &body);
     }
 
     fn clip_lane(&mut self, ui: &mut egui::Ui, row: Rect, lanes: Rect, track: u64) {
@@ -438,7 +530,16 @@ impl App {
             self.sel_clip = None;
             self.select_track(track);
         }
-        if bg.double_clicked() {
+        if bg.clicked() {
+            self.arr.multi.clear();
+        }
+        let bg_step = bg.interact_pointer_pos().or(bg.hover_pos()).map(|p| self.snap(step_at(p.x).max(0.0), alt)).unwrap_or(0);
+        if bg.secondary_clicked() {
+            self.arr.menu_step = bg_step;
+        }
+        let at = self.arr.menu_step;
+        bg.context_menu(|ui| self.lane_menu(ui, track, at));
+        if bg.double_clicked() && !self.guard_locked(track) {
             if let Some(pos) = bg.interact_pointer_pos() {
                 let start = self.snap_floor(step_at(pos.x), false) / 16 * 16;
                 let (name, color, kind) = {
@@ -466,12 +567,19 @@ impl App {
                 continue;
             }
             let r = Rect::from_min_max(pos2(x0, row.top() + 1.0), pos2(x1.max(x0 + 3.0), row.bottom() - 2.0));
-            let col = color32(ac.clip.color);
-            let selected = self.sel_clip == Some(ClipRef::Arr { track, id: ac.id });
+            let col = if ac.clip.muted { Color32::from_rgb(0x6a, 0x6a, 0x6a) } else { color32(ac.clip.color) };
+            let selected = self.sel_clip == Some(ClipRef::Arr { track, id: ac.id }) || self.arr.multi.contains(&(track, ac.id));
             p.rect_filled(r, 2.0, darken(col, 0.55));
             let head = Rect::from_min_size(r.min, vec2(r.width(), 13.0));
             p.rect_filled(head, 2.0, col);
-            p.with_clip_rect(r.intersect(lanes)).text(head.left_center() + vec2(3.0, 0.0), Align2::LEFT_CENTER, &ac.clip.name, FontId::proportional(10.5), on_color(col));
+            let mut label = ac.clip.name.clone();
+            if ac.clip.link != 0 {
+                label = format!("∞ {label}");
+            }
+            if ac.clip.muted {
+                label = format!("{label} (muted)");
+            }
+            p.with_clip_rect(r.intersect(lanes)).text(head.left_center() + vec2(3.0, 0.0), Align2::LEFT_CENTER, label, FontId::proportional(10.5), on_color(col));
             // Note preview, repeated for looped clips.
             let body = Rect::from_min_max(pos2(r.left(), head.bottom() + 2.0), pos2(r.right(), r.bottom() - 2.0));
             if let Some(a) = &ac.clip.audio {
@@ -514,13 +622,26 @@ impl App {
                 ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeHorizontal);
             }
             if resp.clicked() {
+                if ui.input(|i| i.modifiers.command) {
+                    // Ctrl-click builds a multi-selection (for Join, Delete).
+                    if let Some(ClipRef::Arr { track: st, id: sid }) = self.sel_clip {
+                        self.arr.multi.insert((st, sid));
+                    }
+                    if !self.arr.multi.remove(&(track, ac.id)) {
+                        self.arr.multi.insert((track, ac.id));
+                    }
+                } else {
+                    self.arr.multi.clear();
+                }
                 self.select_clip(ClipRef::Arr { track, id: ac.id });
             }
             if resp.double_clicked() {
                 self.select_clip(ClipRef::Arr { track, id: ac.id });
                 self.detail = Detail::Clip;
             }
-            if resp.drag_started() {
+            if resp.drag_started() && self.track_locked(track) {
+                self.guard_locked(track);
+            } else if resp.drag_started() {
                 let pos = resp.interact_pointer_pos().unwrap_or(r.min);
                 self.select_clip(ClipRef::Arr { track, id: ac.id });
                 self.arr.drag = Some(if near_edge {
@@ -529,25 +650,12 @@ impl App {
                     ArrDrag::Move { track, id: ac.id, grab: step_at(pos.x) - ac.start as f32 }
                 });
             }
-            resp.context_menu(|ui| {
-                if ui.button("Duplicate   (Ctrl+D)").clicked() {
-                    self.sel_clip = Some(ClipRef::Arr { track, id: ac.id });
-                    self.duplicate_selected_clip();
-                    ui.close_menu();
-                }
-                if ui.button("Delete   (Del)").clicked() {
-                    self.sel_clip = Some(ClipRef::Arr { track, id: ac.id });
-                    self.delete_selected_clip();
-                    ui.close_menu();
-                }
-                if ui.button("Set Loop to Clip").clicked() {
-                    self.project.loop_start = ac.start;
-                    self.project.loop_len = ac.len;
-                    self.project.loop_on = true;
-                    self.touch();
-                    ui.close_menu();
-                }
-            });
+            let menu_step = resp.interact_pointer_pos().or(resp.hover_pos()).map(|p| self.snap(step_at(p.x).max(0.0), alt)).unwrap_or(ac.start);
+            if resp.secondary_clicked() {
+                self.arr.menu_step = menu_step;
+            }
+            let at = self.arr.menu_step;
+            resp.context_menu(|ui| self.arr_clip_menu(ui, track, ac.id, at));
             self.hint(&resp, &ac.clip.name, "Timeline clip. Drag to move (also to other tracks), drag the right edge to loop/shorten it, double-click to edit notes. Alt disables snapping.");
         }
 
@@ -673,9 +781,15 @@ impl App {
         self.touch();
     }
 
+    /// Tracks shown in the timeline (hidden ones only when "Show Hidden Tracks" is on).
+    pub(super) fn arr_track_ids(&self) -> Vec<u64> {
+        self.project.tracks.iter().filter(|t| !t.hidden || self.show_hidden).map(|t| t.id).collect()
+    }
+
     fn track_at_y(&self, lanes: Rect, y: f32) -> Option<u64> {
         let mut top = lanes.top() - self.arr.scroll_y;
-        for t in &self.project.tracks {
+        let ids = self.arr_track_ids();
+        for t in self.project.tracks.iter().filter(|t| ids.contains(&t.id)) {
             if y >= top && y < top + LANE_H {
                 return Some(t.id);
             }
@@ -683,16 +797,20 @@ impl App {
             if self.auto_open.contains(&t.id) {
                 top += AUTO_H;
             }
+            if t.show_takes {
+                top += t.takes.len() as f32 * super::takes::TAKE_H;
+            }
         }
         None
     }
 
     /// The clip `id` wins: other clips on the track that overlap it are trimmed or removed.
-    fn resolve_overlaps(&mut self, track: u64, id: u64) {
+    pub(super) fn resolve_overlaps(&mut self, track: u64, id: u64) {
         let Some(t) = self.project.track_mut(track) else { return };
         let Some(me) = t.arrangement.iter().find(|c| c.id == id).cloned() else { return };
         let (s, e) = (me.start, me.start + me.len);
         let mut extra = vec![];
+        let mut trimmed = vec![];
         t.arrangement.retain_mut(|c| {
             if c.id == id {
                 return true;
@@ -709,19 +827,31 @@ impl App {
                 let mut right = c.clone();
                 right.start = e;
                 right.len = ce - e;
-                extra.push(right);
+                extra.push((right, e - cs));
                 c.len = s - cs;
                 return true;
             }
             if cs < s {
                 c.len = s - cs;
             } else {
+                // The front is covered: the remaining part starts later in the clip's content.
+                trimmed.push((c.id, e - cs));
                 c.len = ce - e;
                 c.start = e;
             }
             true
         });
-        for mut r in extra {
+        for (cid, rel) in trimmed {
+            if let Some(i) = self.project.track(track).and_then(|t| t.arrangement.iter().position(|c| c.id == cid)) {
+                let ac = self.project.track(track).unwrap().arrangement[i].clone();
+                let full = ArrClip { start: ac.start - rel, len: ac.len + rel, ..ac };
+                let clip = self.clip_from(&full, rel);
+                self.project.track_mut(track).unwrap().arrangement[i].clip = clip;
+            }
+        }
+        for (mut r, rel) in extra {
+            let full = ArrClip { start: r.start - rel, len: r.len + rel, ..r.clone() };
+            r.clip = self.clip_from(&full, rel);
             r.id = self.project.new_id();
             if let Some(t) = self.project.track_mut(track) {
                 t.arrangement.push(r);

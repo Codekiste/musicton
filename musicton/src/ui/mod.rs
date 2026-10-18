@@ -4,6 +4,7 @@ mod analysis_ui;
 mod arrangement;
 mod arranger;
 mod browser;
+mod clip_actions;
 mod clip_editor;
 mod composition_ui;
 mod devices;
@@ -17,11 +18,15 @@ mod plugins_ui;
 mod rack_ui;
 mod samplers_ui;
 mod remote;
+mod remote_menus;
 mod remote_workflow;
 mod score_ui;
 mod session;
 mod synth_ui;
 pub mod theme;
+mod track_actions;
+mod takes;
+mod menus;
 mod transport;
 mod versions_ui;
 mod video_ui;
@@ -146,6 +151,11 @@ pub struct App {
     sel_device: Option<u64>,
     rack: rack_ui::RackUiState,
     mixer: mixer::MixerState,
+    track_clipboard: Option<Track>,
+    clip_clipboard: Option<(Clip, u32)>,
+    show_hidden: bool,
+    info_edit: Option<(u64, String)>,
+    header_cfg: menus::HeaderCfg,
     chord_pads: composition_ui::ChordPadState,
     versions: versions_ui::VersionsState,
     video: video_ui::VideoState,
@@ -252,6 +262,11 @@ impl App {
             sel_device: None,
             rack: Default::default(),
             mixer: Default::default(),
+            track_clipboard: None,
+            clip_clipboard: None,
+            show_hidden: false,
+            info_edit: None,
+            header_cfg: menus::HeaderCfg::load(),
             chord_pads: Default::default(),
             versions: Default::default(),
             video: Default::default(),
@@ -558,6 +573,11 @@ impl App {
     }
 
     fn add_device(&mut self, sel: Sel, kind: DeviceKind, at: Option<usize>) {
+        if let Sel::Track(t) = sel {
+            if self.guard_locked(t) {
+                return;
+            }
+        }
         let id = self.project.new_id();
         if let Some(ch) = self.channel_mut(sel) {
             let d = Device::new(id, kind);
@@ -703,6 +723,7 @@ impl App {
             .tracks
             .iter()
             .filter(|t| !t.group.and_then(|g| self.project.track(g)).is_some_and(|g| g.folded))
+            .filter(|t| !t.hidden || self.show_hidden)
             .map(|t| t.id)
             .collect()
     }
@@ -749,6 +770,9 @@ impl App {
     }
 
     fn delete_track(&mut self, id: u64) {
+        if self.guard_locked(id) {
+            return;
+        }
         let is_group = self.project.track(id).is_some_and(|t| t.instrument.kind == InstrumentKind::Group);
         if is_group {
             for t in &mut self.project.tracks {
@@ -795,7 +819,25 @@ impl App {
     }
 
     fn delete_selected_clip(&mut self) {
+        // Several timeline clips selected (Ctrl-click / Select All Clips).
+        if !self.arr.multi.is_empty() {
+            let multi: Vec<(u64, u64)> = self.arr.multi.drain().collect();
+            for (t, id) in multi {
+                if self.track_locked(t) {
+                    continue;
+                }
+                if let Some(tr) = self.project.track_mut(t) {
+                    tr.arrangement.retain(|c| c.id != id);
+                }
+            }
+            self.sel_clip = None;
+            self.touch();
+            return;
+        }
         let Some(r) = self.sel_clip else { return };
+        if self.guard_locked(r.track()) {
+            return;
+        }
         match r {
             ClipRef::Session { track, scene } => {
                 if let Some(t) = self.project.track_mut(track) {
@@ -849,6 +891,7 @@ impl App {
     fn end_frame(&mut self, ctx: &Context) {
         self.sync_nexa_presets();
         if self.changed {
+            self.sync_linked();
             self.changed = false;
             self.publish = true;
             self.uncommitted = true;
@@ -1250,7 +1293,7 @@ impl App {
             for t in &mut st.tracks {
                 t.meter = [0.0; 2];
             }
-            st.returns = [[0.0; 2]; 2];
+            st.returns = [[0.0; 2]; MAX_RETURNS];
             st.master = [0.0; 2];
         }
         let decay = 0.82;
@@ -1262,8 +1305,9 @@ impl App {
         for t in &self.status.tracks {
             upd(t.id, t.meter);
         }
-        upd(RETURN_METER, self.status.returns[0]);
-        upd(RETURN_METER + 1, self.status.returns[1]);
+        for k in 0..MAX_RETURNS {
+            upd(RETURN_METER + k as u64, self.status.returns[k]);
+        }
         upd(MASTER_METER, self.status.master);
     }
 
@@ -1419,7 +1463,7 @@ pub fn demo_with_audio() -> Project {
     let rid = p.new_id();
     let iid = p.new_id();
     let t = p.track_mut(id).unwrap();
-    t.channel.sends = [0.3, 0.0];
+    t.channel.sends = sends2(0.3, 0.0);
     t.channel.volume = 0.7;
     t.clips[3] = Some(rclip.clone());
     t.clips[4] = Some(iclip.clone());
@@ -1492,9 +1536,17 @@ impl eframe::App for App {
                         egui::Frame::default().fill(PANEL).inner_margin(egui::Margin::same(4)).show(ui, |ui| {
                             ui.set_width(ui.available_width());
                             ui.set_height(ui.available_height());
-                            ui.vertical(|ui| match self.detail {
-                                Detail::Clip => self.clip_detail(ui),
-                                Detail::Devices => self.device_detail(ui),
+                            // Protected tracks: the editors are shown but cannot be changed.
+                            let shown = match self.detail {
+                                Detail::Clip => self.sel_clip.map(|c| c.track()),
+                                Detail::Devices => self.selected_track(),
+                            };
+                            let locked = shown.is_some_and(|t| self.track_locked(t));
+                            ui.add_enabled_ui(!locked, |ui| {
+                                ui.vertical(|ui| match self.detail {
+                                    Detail::Clip => self.clip_detail(ui),
+                                    Detail::Devices => self.device_detail(ui),
+                                });
                             });
                         });
                     });
@@ -1516,6 +1568,7 @@ impl eframe::App for App {
         self.rules_window(ctx);
         self.versions_window(ctx);
         self.video_window(ctx);
+        self.track_windows(ctx);
         self.sync_plugins();
         self.plugin_overlay_ui(ctx);
         self.update_arr_record();

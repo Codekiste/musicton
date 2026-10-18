@@ -60,6 +60,9 @@ impl App {
                 Ok(json!({ "follow_chords": on }))
             }
             "transform_clip" => self.cmd_transform(a),
+            "track_action" => self.cmd_track_action(a),
+            "clip_action" => self.cmd_clip_action(a),
+            "time_action" => self.cmd_time_action(a),
             "add_chord_to_clip" => self.cmd_clip_chord(a),
             "versions" => self.cmd_versions(a),
             "plugins" => self.cmd_plugins(a),
@@ -294,7 +297,7 @@ impl App {
         }
     }
 
-    fn clip_ref(&self, a: &Value) -> Result<super::ClipRef, String> {
+    pub(super) fn clip_ref(&self, a: &Value) -> Result<super::ClipRef, String> {
         let track = self.resolve_track(a.get("track"))?;
         Ok(match u(a, "arrangement_clip_id") {
             Some(id) => super::ClipRef::Arr { track, id },

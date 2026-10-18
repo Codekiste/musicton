@@ -822,7 +822,7 @@ pub fn demo_project() -> Project {
     let d7 = p.new_id();
     {
         let t = p.track_mut(ids[0]).unwrap();
-        t.channel.sends = [0.08, 0.0];
+        t.channel.sends = sends2(0.08, 0.0);
         t.channel.volume = 0.82;
     }
     {
@@ -834,14 +834,14 @@ pub fn demo_project() -> Project {
         let t = p.track_mut(ids[2]).unwrap();
         t.channel.devices.push(Device::new(d2, DeviceKind::Saturator).with(0, 0.25).with(2, 0.6));
         t.channel.devices.push(Device::new(d3, DeviceKind::Sidechain).with(0, 0.4));
-        t.channel.sends = [0.12, 0.3];
+        t.channel.sends = sends2(0.12, 0.3);
         t.channel.volume = 0.7;
     }
     {
         let t = p.track_mut(ids[3]).unwrap();
         t.channel.devices.push(Device::new(d4, DeviceKind::Sidechain).with(0, 0.6));
         t.channel.devices.push(Device::new(d5, DeviceKind::Utility).with(3, 180.0));
-        t.channel.sends = [0.35, 0.45];
+        t.channel.sends = sends2(0.35, 0.45);
         t.channel.volume = 0.68;
     }
     {
@@ -850,7 +850,7 @@ pub fn demo_project() -> Project {
             Device::new(d6, DeviceKind::FilterSweep).with(1, 1400.0).with(3, 0.35).with(4, params::div_index("4 bars") as f32),
         );
         t.channel.devices.push(Device::new(d7, DeviceKind::Sidechain).with(0, 0.75).with(1, 0.3));
-        t.channel.sends = [0.4, 0.1];
+        t.channel.sends = sends2(0.4, 0.1);
         t.channel.volume = 0.66;
     }
 

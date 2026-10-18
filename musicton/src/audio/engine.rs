@@ -47,7 +47,7 @@ pub struct Status {
     pub arr_pos: f32,
     pub start_marker: u32,
     pub tracks: Vec<TrackStatus>,
-    pub returns: [[f32; 2]; 2],
+    pub returns: [[f32; 2]; MAX_RETURNS],
     pub master: [f32; 2],
     pub cpu: f32,
     pub reductions: Vec<(u64, f32)>,
@@ -85,7 +85,7 @@ struct ChannelDsp {
     pan_l: Smooth,
     pan_r: Smooth,
     mute: Smooth,
-    sends: [Smooth; 2],
+    sends: [Smooth; MAX_RETURNS],
     meter: [f32; 2],
     /// Newly created channels jump straight to their mix values instead of fading in.
     fresh: bool,
@@ -101,7 +101,7 @@ impl ChannelDsp {
             pan_l: Smooth::new(1.0, 0.01, sr),
             pan_r: Smooth::new(1.0, 0.01, sr),
             mute: Smooth::new(1.0, 0.005, sr),
-            sends: [Smooth::new(0.0, 0.01, sr), Smooth::new(0.0, 0.01, sr)],
+            sends: std::array::from_fn(|_| Smooth::new(0.0, 0.01, sr)),
             meter: [0.0; 2],
             fresh: true,
         }
@@ -132,7 +132,7 @@ impl ChannelDsp {
                 dd.chains.resize_with(d.chains.len(), || ChannelDsp::new(sr));
                 for (cd, c) in dd.chains.iter_mut().zip(&d.chains) {
                     cd.sync_devices(&c.devices, sr);
-                    cd.set_mix(c.volume, c.pan, [0.0; 2], c.mute);
+                    cd.set_mix(c.volume, c.pan, [0.0; MAX_RETURNS], c.mute);
                     cd.settle();
                 }
             }
@@ -140,22 +140,22 @@ impl ChannelDsp {
         }
     }
 
-    fn set_mix(&mut self, vol: f32, pan: f32, sends: [f32; 2], muted: bool) {
+    fn set_mix(&mut self, vol: f32, pan: f32, sends: [f32; MAX_RETURNS], muted: bool) {
         self.gain.target = fader_to_gain(vol);
         let (l, r) = pan_gains(pan);
         self.pan_l.target = l;
         self.pan_r.target = r;
         self.mute.target = if muted { 0.0 } else { 1.0 };
-        self.sends[0].target = sends[0];
-        self.sends[1].target = sends[1];
+        for (s, v) in self.sends.iter_mut().zip(sends) {
+            s.target = v;
+        }
     }
 
     /// Called after the first mix setup: skip the smoothing ramp.
     fn settle(&mut self) {
         if self.fresh {
             self.fresh = false;
-            let [s0, s1] = &mut self.sends;
-            for s in [&mut self.gain, &mut self.pan_l, &mut self.pan_r, &mut self.mute, s0, s1] {
+            for s in [&mut self.gain, &mut self.pan_l, &mut self.pan_r, &mut self.mute].into_iter().chain(self.sends.iter_mut()) {
                 s.value = s.target;
             }
         }
@@ -176,7 +176,7 @@ impl ChannelDsp {
     }
 
     /// Applies fader/pan/mute, adds into the destination and optional send buses.
-    fn output(&mut self, n: usize, dl: &mut [f32], dr: &mut [f32], mut sends: Option<&mut [[[f32; MAX_BLOCK]; 2]; 2]>) {
+    fn output(&mut self, n: usize, dl: &mut [f32], dr: &mut [f32], mut sends: Option<&mut [[[f32; MAX_BLOCK]; 2]]>) {
         for i in 0..n {
             let g = self.gain.next() * self.mute.next();
             let a = self.l[i] * g * self.pan_l.next();
@@ -186,10 +186,14 @@ impl ChannelDsp {
             dl[i] += a;
             dr[i] += b;
             if let Some(s) = sends.as_deref_mut() {
-                for k in 0..2 {
-                    let sg = self.sends[k].next();
-                    s[k][0][i] += a * sg;
-                    s[k][1][i] += b * sg;
+                for (k, bus) in s.iter_mut().enumerate() {
+                    let sm = &mut self.sends[k];
+                    if sm.target == 0.0 && sm.value == 0.0 {
+                        continue;
+                    }
+                    let sg = sm.next();
+                    bus[0][i] += a * sg;
+                    bus[1][i] += b * sg;
                 }
             }
         }
@@ -344,6 +348,8 @@ pub struct Engine {
     project: Arc<Project>,
     tracks: Vec<TrackDsp>,
     returns: Vec<ChannelDsp>,
+    /// Send buses, one per return track.
+    send_bus: Vec<[[f32; MAX_BLOCK]; 2]>,
     master: ChannelDsp,
     playing: bool,
     tick: u64,
@@ -371,6 +377,7 @@ impl Engine {
             project: Arc::new(Project::empty()),
             tracks: vec![],
             returns: vec![],
+            send_bus: vec![[[0.0; MAX_BLOCK]; 2]; MAX_RETURNS],
             master: ChannelDsp::new(sr),
             playing: false,
             tick: 0,
@@ -441,10 +448,10 @@ impl Engine {
             self.tracks.push(td);
         }
         for (ti, t) in p.tracks.iter().enumerate() {
-            let group = t.group.and_then(|g| p.tracks.iter().position(|x| x.id == g && x.instrument.kind == InstrumentKind::Group));
+            let group = t.group.and_then(|g| p.tracks.iter().position(|x| x.id == g && x.instrument.kind == InstrumentKind::Group && !x.folder));
             let dest = match t.output {
                 Output::Track(id) => p.tracks.iter().position(|x| x.id == id).filter(|&i| i != ti).map(Dest::Track),
-                Output::Return(k) if (k as usize) < p.returns.len().min(2) => Some(Dest::Return(k as usize)),
+                Output::Return(k) if (k as usize) < p.returns.len().min(MAX_RETURNS) => Some(Dest::Return(k as usize)),
                 _ => None,
             };
             let td = &mut self.tracks[ti];
@@ -469,12 +476,12 @@ impl Engine {
         for (rd, rt) in self.returns.iter_mut().zip(&p.returns) {
             apply_devices(rd, &rt.channel.devices, &[], &[], &ctx, true);
             let c = &rt.channel;
-            rd.set_mix(c.volume, c.pan, [0.0; 2], c.mute);
+            rd.set_mix(c.volume, c.pan, [0.0; MAX_RETURNS], c.mute);
             rd.settle();
         }
         apply_devices(&mut self.master, &p.master.devices, &[], &[], &ctx, true);
         let m = &p.master;
-        self.master.set_mix(m.volume, 0.0, [0.0; 2], false);
+        self.master.set_mix(m.volume, 0.0, [0.0; MAX_RETURNS], false);
         self.master.settle();
     }
 
@@ -549,7 +556,7 @@ impl Engine {
                 AutoTarget::Instrument(i) if i < defs.len() => td.inst_scratch[i] = defs[i].from_norm(v),
                 AutoTarget::Volume => vol = v,
                 AutoTarget::Pan => pan = v * 2.0 - 1.0,
-                AutoTarget::Send(k) => sends[(k as usize).min(1)] = v,
+                AutoTarget::Send(k) => sends[(k as usize).min(MAX_RETURNS - 1)] = v,
                 _ => {}
             }
         }
@@ -560,7 +567,10 @@ impl Engine {
                 }
                 AutoTarget::Volume => vol = (vol + off).clamp(0.0, 1.0),
                 AutoTarget::Pan => pan = (pan + off * 2.0).clamp(-1.0, 1.0),
-                AutoTarget::Send(k) => sends[(k as usize).min(1)] = (sends[(k as usize).min(1)] + off).clamp(0.0, 1.0),
+                AutoTarget::Send(k) => {
+                    let k = (k as usize).min(MAX_RETURNS - 1);
+                    sends[k] = (sends[k] + off).clamp(0.0, 1.0);
+                }
                 _ => {}
             }
         }
@@ -838,6 +848,7 @@ impl Engine {
                     td.inst.all_off();
                 }
             }
+            let clip_and_local = clip_and_local.filter(|(c, _)| !c.muted);
             if let Some((c, _)) = clip_and_local {
                 td.clip_gain.target = db_to_gain(c.gain.clamp(-60.0, 24.0));
             }
@@ -922,7 +933,11 @@ impl Engine {
         let ctx = self.ctx();
         let mut ml = [0.0f32; MAX_BLOCK];
         let mut mr = [0.0f32; MAX_BLOCK];
-        let mut sends = [[[0.0f32; MAX_BLOCK]; 2]; 2];
+        let mut sends = std::mem::take(&mut self.send_bus);
+        for bus in sends.iter_mut() {
+            bus[0][..n].fill(0.0);
+            bus[1][..n].fill(0.0);
+        }
         for td in &mut self.tracks {
             td.gin[0][..n].fill(0.0);
             td.gin[1][..n].fill(0.0);
@@ -988,13 +1003,14 @@ impl Engine {
             }
             self.tracks[ti].ch = sc_ch;
         }
-        for (k, rd) in self.returns.iter_mut().enumerate().take(2) {
+        for (k, rd) in self.returns.iter_mut().enumerate().take(MAX_RETURNS) {
             rd.l[..n].copy_from_slice(&sends[k][0][..n]);
             rd.r[..n].copy_from_slice(&sends[k][1][..n]);
             sidechain_feed(rd, &self.tracks, n);
             rd.process_devices(n, &ctx);
             rd.output(n, &mut ml, &mut mr, None);
         }
+        self.send_bus = sends;
         if self.click.env > 0.0001 {
             for i in 0..n {
                 let c = self.click.phase.sine(self.click.freq, self.sr) * self.click.env;
@@ -1088,7 +1104,7 @@ impl Engine {
             ts.meter[1] = ts.meter[1].max(td.ch.meter[1]);
             td.ch.meter = [0.0; 2];
         }
-        for (k, rd) in self.returns.iter_mut().enumerate().take(2) {
+        for (k, rd) in self.returns.iter_mut().enumerate().take(MAX_RETURNS) {
             st.returns[k][0] = st.returns[k][0].max(rd.meter[0]);
             st.returns[k][1] = st.returns[k][1].max(rd.meter[1]);
             rd.meter = [0.0; 2];
@@ -1161,7 +1177,7 @@ fn apply_devices(ch: &mut ChannelDsp, devs: &[Device], autos: &[(AutoTarget, f32
         dd.apply(ctx, force);
         for (cd, c) in dd.chains.iter_mut().zip(&d.chains) {
             apply_devices(cd, &c.devices, autos, mods, ctx, force);
-            cd.set_mix(c.volume, c.pan, [0.0; 2], c.mute);
+            cd.set_mix(c.volume, c.pan, [0.0; MAX_RETURNS], c.mute);
         }
     }
 }

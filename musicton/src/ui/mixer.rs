@@ -127,7 +127,7 @@ impl App {
             h += 12.0 + slots as f32 * ROW_H + 4.0;
         }
         if m.show_sends {
-            h += 12.0 + 2.0 * ROW_H + 4.0;
+            h += 12.0 + self.project.returns.len() as f32 * ROW_H + 4.0;
         }
         if m.show_io {
             h += 12.0 + ROW_H + 4.0;
@@ -209,10 +209,11 @@ impl App {
         if self.mixer.show_sends {
             p.text(pos2(inner.left(), y), Align2::LEFT_TOP, "Sends", FontId::proportional(9.0), TEXT_DIM);
             y += 12.0;
+            let send_h = self.project.returns.len() as f32 * ROW_H;
             if let Sel::Track(_) = sel {
-                self.strip_sends(ui, row(y, 2.0 * ROW_H), sel);
+                self.strip_sends(ui, row(y, send_h), sel);
             }
-            y += 2.0 * ROW_H + 4.0;
+            y += send_h + 4.0;
         }
         if self.mixer.show_io {
             p.text(pos2(inner.left(), y), Align2::LEFT_TOP, "Output", FontId::proportional(9.0), TEXT_DIM);
@@ -260,6 +261,9 @@ impl App {
                 self.renaming = Some((RenameTarget::Track(id), name.clone()));
             }
             nresp.context_menu(|ui| self.track_menu(ui, id));
+        }
+        if let Sel::Return(k) = sel {
+            nresp.context_menu(|ui| self.return_menu(ui, k));
         }
         if nresp.clicked() {
             self.sel = sel;
@@ -359,7 +363,7 @@ impl App {
                     (t.instrument.kind.name().to_string(), "The instrument of this track. Click to edit it.")
                 }
             }
-            Sel::Return(k) => (format!("Return {}", ["A", "B"][k.min(1)]), "Return track fed by the Send knobs."),
+            Sel::Return(k) => (format!("Return {}", return_letter(k)), "Return track fed by the Send knobs."),
             Sel::Master => ("Stereo Out".to_string(), "The master output."),
         };
         let resp = ui.interact(r, ui.id().with(("mix_in", format!("{sel:?}"))), Sense::click());
@@ -487,7 +491,8 @@ impl App {
         let Sel::Track(id) = sel else { return };
         let Some(mut sends) = self.project.track(id).map(|t| t.channel.sends) else { return };
         let before = sends;
-        for (k, v) in sends.iter_mut().enumerate() {
+        let n_ret = self.project.returns.len();
+        for (k, v) in sends.iter_mut().enumerate().take(n_ret) {
             let sr = Rect::from_min_size(pos2(r.left(), r.top() + k as f32 * ROW_H), vec2(r.width(), ROW_H - 2.0));
             let resp = ui.interact(sr, ui.id().with(("mix_send", id, k)), Sense::click_and_drag());
             if resp.dragged() {
@@ -503,7 +508,7 @@ impl App {
             p.rect_filled(fill, 2.0, Color32::from_rgb(0x2e, 0x6b, 0x52));
             let ret = self.project.returns.get(k).map(|r| r.name.clone()).unwrap_or_default();
             let clip = p.with_clip_rect(sr.shrink(1.0));
-            clip.text(sr.left_center() + vec2(4.0, 0.0), Align2::LEFT_CENTER, ret.clone(), FontId::proportional(9.5), TEXT);
+            clip.text(sr.left_center() + vec2(4.0, 0.0), Align2::LEFT_CENTER, &ret, FontId::proportional(9.5), TEXT);
             clip.text(sr.right_center() - vec2(3.0, 0.0), Align2::RIGHT_CENTER, format!("{:.0}", *v * 100.0), FontId::monospace(9.0), TEXT_DIM);
             resp.context_menu(|ui| self.map_menu(ui, MapTarget::Send(id, k as u8), Some(id)));
             self.hint(&resp, &format!("Send to {ret}"), "Drag sideways to set how much of this track goes to the return (Shift: fine). Double-click for off. Right-click to map.");

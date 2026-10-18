@@ -8,7 +8,28 @@ Das B-303-Plugin hat einen eigenen Changelog: [b303-plugin/CHANGELOG.md](b303-pl
 ### Hinzugefügt
 - Mixer-Ansicht (Button „Mixer“, Strg+M): Kanalzüge in voller Höhe mit EQ-Anzeige, Instrument, Insert-Slots (Bypass, Reihenfolge, Entfernen, Hinzufügen), Send-Reglern, Output-Routing, Pan, großem Fader mit dB-Skala, Stereo-Meter mit Peak-Hold, Peak-Anzeige, Mute/Solo/Record und Spurname in Spurfarbe; Bereiche einzeln ein- und ausblendbar; per MCP mit `set_view view=mixer`
 
+- Rechtsklick-Menü am Spurkopf (Launcher, Timeline, Mixer):
+  - Ausschneiden, Kopieren, Einfügen und Duplizieren von Spuren, „Neue Spur mit gleichen Einstellungen“
+  - Info-Text pro Spur, Spursymbol, Spurfarben automatisch vergeben
+  - Spuren einfügen: Instrument- und Audiospur (aus der eigenen Standardspur), Return-Spur (bis zu 6 Returns, Sends pro Return)
+  - Gruppe mit gemeinsamem Bus oder Ordner nur zur Organisation, „Unbenutzte Spuren löschen“
+  - Freeze/Unfreeze, Freeze und Flatten, Bounce in Place (mit Effekten oder Effekte bleiben live), Bounce in neue Spur
+  - Spur ausblenden, versteckte Spuren anzeigen, Spur schützen (gegen Bearbeiten gesperrt), alle Clips auswählen
+  - Konfigurierbarer Spurkopf in der Timeline (Freeze, Schutz, Ausblenden, Aufnahme, Take-Lanes)
+  - Instrument ersetzen, „Als Standardspur speichern“
+- Rechtsklick-Menü an Clips:
+  - Ausschneiden, Kopieren, Einfügen, Duplizieren, verknüpfte Kopie (Bearbeiten wirkt auf alle Kopien), Clip stummschalten
+  - Teilen an Mausposition oder Abspielposition, ausgewählte Clips verbinden (Strg-Klick für Mehrfachauswahl), auf Loop-Bereich zuschneiden, Loop bis zum nächsten Clip
+  - Audio: Reverse, Warp-Modus, Tempo aus Länge erkennen, Tonhöhenkorrektur, in Sampler-Spur umwandeln (Slicer, Beat Pads, Multi Sampler), Audio zu MIDI, Stems
+  - MIDI: Quantisieren, Legato, Notenlängen, Velocity (fest, ausgleichen, humanisieren)
+  - Export als Audiodatei, als Loop mit Tempo im Namen oder als MIDI-Datei
+  - Launcher-Clips: Next Action, gespielte Noten hier aufnehmen, Szene einfügen
+- Rechtsklick auf freie Timeline-Fläche: Einfügen, Stille einfügen, Zeit löschen, Zeit duplizieren (auf dem Loop-Bereich)
+- Take-Lanes fürs Comping: Beim Aufnehmen überschriebene Clips landen auf einer Take-Lane, ein Klick übernimmt den Take
+- MCP: `track_action`, `clip_action` und `time_action` für alle Menüfunktionen
+
 ### Behoben
+- Beim Kürzen eines Clips von vorne (überlappende Clips) beginnt der Rest jetzt an der richtigen Stelle im Inhalt
 - Bricht die Audioausgabe ab (Soundserver-Neustart, Interface getrennt), verbindet sich Musicton automatisch neu, statt die Fehlermeldung endlos ins Log zu schreiben
 - VST3-Plug-ins mit getrenntem Controller (z. B. Surge XT) zeigen ihren Editor: Component und Controller werden über Connection Points verbunden, der Host stellt Nachrichten (IMessage/IAttributeList) bereit
 - Das Modulator-Panel dehnt sich nicht mehr über die ganze Device Chain aus

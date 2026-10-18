@@ -56,7 +56,7 @@ fn one_track(inst: Instrument, notes: Vec<Note>, bars: u32, fx: Vec<Device>, sen
     let t = p.track_mut(id).unwrap();
     t.instrument = inst;
     t.channel.devices = fx;
-    t.channel.sends = [send_a, 0.0];
+    t.channel.sends = sends2(send_a, 0.0);
     let mut clip = Clip::new("c", CLIP_COLORS[0], bars);
     clip.notes = notes;
     t.clips[0] = Some(clip);

@@ -704,6 +704,32 @@ fn normalize_params(p: &mut Vec<f32>, defs: &[ParamDef]) {
     p.truncate(defs.len());
 }
 
+/// Most return tracks a project can have (each channel has one send per return).
+pub const MAX_RETURNS: usize = 6;
+
+/// Send levels; older projects stored two values, missing ones are filled with 0.
+fn de_sends<'de, D: serde::Deserializer<'de>>(d: D) -> Result<[f32; MAX_RETURNS], D::Error> {
+    let v: Vec<f32> = Vec::deserialize(d)?;
+    let mut out = [0.0; MAX_RETURNS];
+    for (o, x) in out.iter_mut().zip(v) {
+        *o = x;
+    }
+    Ok(out)
+}
+
+/// Send levels for the first two returns.
+pub fn sends2(a: f32, b: f32) -> [f32; MAX_RETURNS] {
+    let mut s = [0.0; MAX_RETURNS];
+    s[0] = a;
+    s[1] = b;
+    s
+}
+
+/// Letter of a return track (A, B, C...).
+pub fn return_letter(k: usize) -> char {
+    (b'A' + k.min(25) as u8) as char
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Channel {
     pub devices: Vec<Device>,
@@ -712,7 +738,8 @@ pub struct Channel {
     pub pan: f32,
     pub mute: bool,
     pub solo: bool,
-    pub sends: [f32; 2],
+    #[serde(deserialize_with = "de_sends")]
+    pub sends: [f32; MAX_RETURNS],
     /// Crossfader assignment: 0 = none, 1 = A, 2 = B.
     #[serde(default)]
     pub xfade: u8,
@@ -720,7 +747,7 @@ pub struct Channel {
 
 impl Default for Channel {
     fn default() -> Self {
-        Self { devices: vec![], volume: 0.85, pan: 0.0, mute: false, solo: false, sends: [0.0, 0.0], xfade: 0 }
+        Self { devices: vec![], volume: 0.85, pan: 0.0, mute: false, solo: false, sends: [0.0; MAX_RETURNS], xfade: 0 }
     }
 }
 
@@ -773,6 +800,12 @@ pub struct Clip {
     /// Clip gain in dB, applied before the device chain.
     #[serde(default)]
     pub gain: f32,
+    /// Muted clips stay in place but do not play.
+    #[serde(default)]
+    pub muted: bool,
+    /// Linked copies share this id: editing one updates all (0 = not linked).
+    #[serde(default)]
+    pub link: u64,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
@@ -845,11 +878,13 @@ impl Clip {
             audio: Some(AudioClip { path: path.into(), warp, bpm, gain: 0.0, transpose: 0.0, offset: 0.0 }),
             follow: None,
             gain: 0.0,
+            muted: false,
+            link: 0,
         }
     }
 
     pub fn new(name: &str, color: [u8; 3], bars: u32) -> Self {
-        Self { name: name.into(), color, len: bars * STEPS_PER_BAR, notes: vec![], audio: None, follow: None, gain: 0.0 }
+        Self { name: name.into(), color, len: bars * STEPS_PER_BAR, notes: vec![], audio: None, follow: None, gain: 0.0, muted: false, link: 0 }
     }
     pub fn bars(&self) -> u32 {
         self.len.div_ceil(STEPS_PER_BAR)
@@ -1006,6 +1041,36 @@ pub struct Track {
     /// Clip notes are bent to the nearest tone of the chord track's current chord.
     #[serde(default)]
     pub follow_chords: bool,
+    /// Free text note about the track (shown in the help panel).
+    #[serde(default)]
+    pub info: String,
+    /// Symbol shown in the track header.
+    #[serde(default)]
+    pub icon: String,
+    /// Hidden tracks are left out of the views (but still play).
+    #[serde(default)]
+    pub hidden: bool,
+    /// Protected tracks cannot be edited (clips, devices, deletion).
+    #[serde(default)]
+    pub locked: bool,
+    /// Group tracks only: a folder just organizes, its members keep their own outputs (no shared bus).
+    #[serde(default)]
+    pub folder: bool,
+    /// Frozen tracks play a rendered copy; the original is kept here to unfreeze.
+    #[serde(default)]
+    pub frozen: Option<Box<Track>>,
+    /// Alternative recordings (take lanes) for comping.
+    #[serde(default)]
+    pub takes: Vec<TakeLane>,
+    #[serde(default)]
+    pub show_takes: bool,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct TakeLane {
+    pub id: u64,
+    pub name: String,
+    pub clips: Vec<ArrClip>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default, Serialize, Deserialize)]
@@ -1471,6 +1536,14 @@ impl Project {
             output: Output::Master,
             modulators: vec![],
             follow_chords: false,
+            info: String::new(),
+            icon: String::new(),
+            hidden: false,
+            locked: false,
+            folder: false,
+            frozen: None,
+            takes: vec![],
+            show_takes: false,
         });
         id
     }

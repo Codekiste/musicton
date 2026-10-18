@@ -341,6 +341,13 @@ impl App {
                 "master" => return Ok(Sel::Master),
                 "a" | "return a" | "reverb" => return Ok(Sel::Return(0)),
                 "b" | "return b" | "delay" => return Ok(Sel::Return(1)),
+                l if l.len() == 1 || l.starts_with("return ") => {
+                    let c = l.chars().last().unwrap_or('?');
+                    let k = (c as u8).wrapping_sub(b'a') as usize;
+                    if c.is_ascii_lowercase() && k < self.project.returns.len() {
+                        return Ok(Sel::Return(k));
+                    }
+                }
                 _ => {}
             }
         }
@@ -381,6 +388,12 @@ impl App {
         if let Some(f) = c.follow {
             o["follow"] = json!({ "action": f.action.name(), "bars": f.bars, "chance": f.chance });
         }
+        if c.muted {
+            o["muted"] = json!(true);
+        }
+        if c.link != 0 {
+            o["link"] = json!(c.link);
+        }
         o
     }
 
@@ -415,7 +428,18 @@ impl App {
                     "follow_chords": t.follow_chords,
                     "modulators": t.modulators.iter().map(|m| json!({"id": m.id, "shape": m.shape.name(), "rate": m.rate, "synced": m.synced, "depth": m.depth, "target": m.target.map(|x| format!("{x:?}")), "on": m.on})).collect::<Vec<_>>(),
                     "midi_fx": t.midi_fx.iter().map(|m| json!({"id": m.id, "type": m.kind.name(), "on": m.on})).collect::<Vec<_>>(),
-                    "arrangement_clips": t.arrangement.iter().map(|c| json!({"id": c.id, "name": c.clip.name, "start_bar": c.start as f32 / 16.0 + 1.0, "bars": c.len as f32 / 16.0})).collect::<Vec<_>>(),
+                    "arrangement_clips": t.arrangement.iter().map(|c| {
+                        let mut o = json!({"id": c.id, "name": c.clip.name, "start_bar": c.start as f32 / 16.0 + 1.0, "bars": c.len as f32 / 16.0, "loop_bars": c.clip.len as f32 / 16.0, "notes": c.clip.notes.len(), "audio": c.clip.audio.is_some()});
+                        if c.clip.muted {
+                            o["muted"] = json!(true);
+                        }
+                        if c.clip.link != 0 {
+                            o["link"] = json!(c.clip.link);
+                        }
+                        o
+                    }).collect::<Vec<_>>(),
+                    "info": t.info, "icon": t.icon, "hidden": t.hidden, "protected": t.locked, "frozen": t.frozen.is_some(), "folder": t.folder,
+                    "take_lanes": t.takes.iter().map(|l| json!({"id": l.id, "name": l.name, "clips": l.clips.iter().map(|c| json!({"id": c.id, "name": c.clip.name, "start_bar": c.start as f32 / 16.0 + 1.0, "bars": c.len as f32 / 16.0})).collect::<Vec<_>>()})).collect::<Vec<_>>(),
                     "automation": t.automation.iter().map(|a| format!("{:?} ({} points)", a.target, a.points.len())).collect::<Vec<_>>(),
                 })
             })
@@ -669,6 +693,14 @@ impl App {
                 }
                 if let Some(v) = arg_f32(a, "send_b") {
                     t.channel.sends[1] = v.clamp(0.0, 1.0);
+                }
+                // Any return: "sends": [a, b, c, ...] (null keeps a value).
+                if let Some(arr) = a.get("sends").and_then(|v| v.as_array()) {
+                    for (k, v) in arr.iter().enumerate().take(MAX_RETURNS) {
+                        if let Some(x) = v.as_f64() {
+                            t.channel.sends[k] = (x as f32).clamp(0.0, 1.0);
+                        }
+                    }
                 }
                 if let Some(v) = arg_str(a, "crossfade") {
                     t.channel.xfade = match v.to_lowercase().as_str() { "a" => 1, "b" => 2, _ => 0 };
