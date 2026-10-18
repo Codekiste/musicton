@@ -1,2 +1,3 @@
 /target
 *.mton.bak
+/dist

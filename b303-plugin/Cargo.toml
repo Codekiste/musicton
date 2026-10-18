@@ -1,7 +1,7 @@
 [package]
 name = "b303-plugin"
 description = "B-303 bassline as a VST3/CLAP plug-in"
-version.workspace = true
+version = "0.1.0"  # B-303 plug-in version (tag: b303-vX.Y.Z)
 edition.workspace = true
 license.workspace = true
 
