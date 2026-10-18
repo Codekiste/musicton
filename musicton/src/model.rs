@@ -182,6 +182,8 @@ pub enum DeviceKind {
     Maximizer,
     TruePeakLimiter,
     StereoImager,
+    SpacePanner,
+    PitchFix,
 }
 
 /// Browser folders for audio effect categories.
@@ -193,7 +195,7 @@ pub const DEVICE_CATEGORIES: &[(&str, &[DeviceKind])] = &[
     ("EQ & Filters", &[DeviceKind::FilterSweep, DeviceKind::ChannelEq, DeviceKind::DjEq, DeviceKind::Eq8]),
     ("Modulation", &[DeviceKind::PanLfo, DeviceKind::Chorus, DeviceKind::Flanger, DeviceKind::FreqShifter, DeviceKind::Phaser]),
     ("Reverb & Resonance", &[DeviceKind::BodyResonator, DeviceKind::ChordResonator, DeviceKind::Reverb, DeviceKind::HybridReverb, DeviceKind::Vocoder]),
-    ("Utilities", &[DeviceKind::Analyzer, DeviceKind::Tuner, DeviceKind::Utility, DeviceKind::StereoImager, DeviceKind::Rack]),
+    ("Utilities", &[DeviceKind::Analyzer, DeviceKind::Tuner, DeviceKind::Utility, DeviceKind::StereoImager, DeviceKind::SpacePanner, DeviceKind::PitchFix, DeviceKind::Rack]),
 ];
 
 impl DeviceKind {
@@ -250,6 +252,8 @@ impl DeviceKind {
             Self::Maximizer => "Maximizer",
             Self::TruePeakLimiter => "True Peak Limiter",
             Self::StereoImager => "Stereo Imager",
+            Self::SpacePanner => "Space Panner",
+            Self::PitchFix => "Pitch Fix",
         }
     }
     pub fn info(self) -> &'static str {
@@ -296,6 +300,8 @@ impl DeviceKind {
             Self::TransientShaper => "Boosts or softens the attack and the sustain of sounds independently of their level - punchier drums or tighter tails.",
             Self::Maximizer => "Loudness maximizer: input gain into a transparent lookahead limiter with optional warm pre-saturation.",
             Self::TruePeakLimiter => "Mastering limiter with 4x oversampled true-peak detection and a loudness meter (momentary, short-term, integrated LUFS, true peak).",
+            Self::SpacePanner => "Binaural 3D panner for headphones: place a sound anywhere around, above or behind you, set its distance, let it orbit your head.",
+            Self::PitchFix => "Real-time pitch correction for monophonic voices and instruments: snaps the pitch to the key and scale, from natural (slow) to hard robotic (fast).",
             Self::StereoImager => "Three-band stereo width (mono bass, wide highs) with adjustable crossovers and a correlation meter.",
             Self::Rack => "Container with parallel chains: each chain has its own devices, volume and pan; the outputs are summed (parallel compression, layered effects, dry/wet splits).",
         }
@@ -346,6 +352,8 @@ impl DeviceKind {
             Self::Maximizer => &params::MAXIMIZER_PARAMS,
             Self::TruePeakLimiter => &params::TP_LIMITER_PARAMS,
             Self::StereoImager => &params::IMAGER_PARAMS,
+            Self::SpacePanner => &params::SPACE_PARAMS,
+            Self::PitchFix => &params::PITCHFIX_PARAMS,
         }
     }
 }

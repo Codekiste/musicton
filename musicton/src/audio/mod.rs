@@ -6,6 +6,7 @@ pub mod dsp;
 pub mod effects;
 pub mod effects2;
 pub mod effects3;
+pub mod effects4;
 pub mod instruments3;
 pub mod beatpads;
 pub mod samplers;

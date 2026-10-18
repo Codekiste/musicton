@@ -85,6 +85,8 @@ pub fn create(kind: DeviceKind, sr: f32) -> Box<dyn Effect> {
         DeviceKind::Maximizer => Box::new(e3::Maximizer::new(sr)),
         DeviceKind::TruePeakLimiter => Box::new(e3::TruePeakLimiter::new(sr)),
         DeviceKind::StereoImager => Box::new(e3::Imager::default()),
+        DeviceKind::SpacePanner => Box::new(super::effects4::SpacePanner::new(sr)),
+        DeviceKind::PitchFix => Box::new(super::effects4::PitchFix::new(sr)),
     }
 }
 

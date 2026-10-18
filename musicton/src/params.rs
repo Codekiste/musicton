@@ -1343,3 +1343,28 @@ pub static STRUM_PARAMS: LazyLock<Vec<ParamDef>> = LazyLock::new(|| {
         ParamDef::new("Humanize", 0.0, 1.0, 0.1, Unit::Pct),
     ]
 });
+
+pub static SPACE_PARAMS: LazyLock<Vec<ParamDef>> = LazyLock::new(|| {
+    vec![
+        ParamDef::new("Azimuth", -180.0, 180.0, 0.0, Unit::Deg),
+        ParamDef::new("Elevation", -45.0, 90.0, 0.0, Unit::Deg),
+        ParamDef::new("Distance", 0.2, 20.0, 1.0, Unit::None).log(),
+        ParamDef::new("Orbit", -360.0, 360.0, 0.0, Unit::Deg),
+        ParamDef::new("Room", 0.0, 1.0, 0.3, Unit::Pct),
+        ParamDef::new("Dry/Wet", 0.0, 1.0, 1.0, Unit::Pct),
+    ]
+});
+
+pub static PITCHFIX_PARAMS: LazyLock<Vec<ParamDef>> = LazyLock::new(|| {
+    const KEYS: &[&str] = &["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+    const SCALE_NAMES: &[&str] = &["Chromatic", "Minor", "Major", "Dorian", "Phrygian", "Harmonic Minor", "Minor Pent."];
+    vec![
+        ParamDef::options("Key", KEYS, 9),
+        ParamDef::options("Scale", SCALE_NAMES, 1),
+        ParamDef::new("Speed", 0.0, 1.0, 0.25, Unit::Pct),
+        ParamDef::new("Amount", 0.0, 1.0, 1.0, Unit::Pct),
+        ParamDef::new("Low", 50.0, 400.0, 70.0, Unit::Hz).log(),
+        ParamDef::new("High", 200.0, 1500.0, 900.0, Unit::Hz).log(),
+        ParamDef::new("Dry/Wet", 0.0, 1.0, 1.0, Unit::Pct),
+    ]
+});

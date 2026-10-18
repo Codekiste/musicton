@@ -151,3 +151,39 @@ fn heat_stack_adds_harmonics() {
     let (clean, _, _) = run(DeviceKind::Utility, &[], 1.0, true, gen);
     assert!(h3(&y) > h3(&clean) * 10.0 + 1e-3, "no harmonics added");
 }
+
+/// Frequency from positive zero crossings.
+fn zc(x: &[f32]) -> f32 {
+    let c = x.windows(2).filter(|w| w[0] <= 0.0 && w[1] > 0.0).count();
+    c as f32 / (x.len() as f32 / SR)
+}
+
+#[test]
+fn pitch_fix_snaps_to_scale() {
+    // 452 Hz is between A4 (440) and A#4; in A minor it must land on A4.
+    let gen = |i: usize| (sine(i, 452.0, 0.5), sine(i, 452.0, 0.5));
+    let (l, _, e) = run(DeviceKind::PitchFix, &[("Key", 9.0), ("Scale", 1.0), ("Speed", 0.0)], 2.0, true, gen);
+    let f = zc(&l[48000..]);
+    assert!((f - 440.0).abs() < 6.0, "expected ~440 Hz, got {f}");
+    assert!((e.display().unwrap()[0] - 452.0).abs() < 8.0, "detector off: {:?}", e.display());
+    // Amount 0 leaves it alone.
+    let (l, _, _) = run(DeviceKind::PitchFix, &[("Amount", 0.0)], 1.0, true, gen);
+    assert!((zc(&l[24000..]) - 452.0).abs() < 6.0);
+}
+
+#[test]
+fn space_panner_places_sound() {
+    let gen = |i: usize| {
+        let x = sine(i, 700.0, 0.4) + sine(i, 5000.0, 0.2);
+        (x, x)
+    };
+    let (l, r, _) = run(DeviceKind::SpacePanner, &[("Azimuth", 90.0), ("Room", 0.0)], 1.0, true, gen);
+    assert!(rms(&r[4800..]) > rms(&l[4800..]) * 1.5, "source at +90 must be louder on the right");
+    let (l, r, _) = run(DeviceKind::SpacePanner, &[("Azimuth", -90.0), ("Room", 0.0)], 1.0, true, gen);
+    assert!(rms(&l[4800..]) > rms(&r[4800..]) * 1.5);
+    let (near, _, _) = run(DeviceKind::SpacePanner, &[("Distance", 1.0)], 1.0, true, gen);
+    let (far, _, _) = run(DeviceKind::SpacePanner, &[("Distance", 8.0)], 1.0, true, gen);
+    assert!(rms(&far[4800..]) < rms(&near[4800..]) * 0.5, "distance must attenuate");
+    let (l, r, _) = run(DeviceKind::SpacePanner, &[("Orbit", 180.0)], 3.0, true, gen);
+    assert!(l.iter().chain(&r).all(|v| v.is_finite()));
+}
