@@ -21,7 +21,7 @@ pub trait Effect: Send {
     fn reduction(&self) -> f32 {
         0.0
     }
-    /// Analysis data for devices with a display (Spectrum, Tuner).
+    /// Analysis data for devices with a display (Analyzer, Tuner).
     fn display(&self) -> Option<&[f32]> {
         None
     }
@@ -29,39 +29,39 @@ pub trait Effect: Send {
 
 pub fn create(kind: DeviceKind, sr: f32) -> Box<dyn Effect> {
     match kind {
-        DeviceKind::AutoFilter => Box::new(AutoFilter::default()),
-        DeviceKind::Eq3 => Box::new(Eq3::default()),
+        DeviceKind::FilterSweep => Box::new(FilterSweep::default()),
+        DeviceKind::DjEq => Box::new(DjEq::default()),
         DeviceKind::Saturator => Box::new(Saturator::default()),
         DeviceKind::Echo => Box::new(Echo::new(sr)),
         DeviceKind::Reverb => Box::new(Reverb::new(sr)),
         DeviceKind::Compressor => Box::new(Compressor::default()),
         DeviceKind::Limiter => Box::new(Limiter::default()),
         DeviceKind::Sidechain => Box::new(Sidechain::default()),
-        DeviceKind::Redux => Box::new(Redux::default()),
+        DeviceKind::Bitcrusher => Box::new(Bitcrusher::default()),
         DeviceKind::Utility => Box::new(Utility::default()),
-        DeviceKind::AutoPan => Box::new(e2::AutoPan::default()),
-        DeviceKind::BeatRepeat => Box::new(e2::BeatRepeat::new(sr)),
+        DeviceKind::PanLfo => Box::new(e2::PanLfo::default()),
+        DeviceKind::Stutter => Box::new(e2::Stutter::new(sr)),
         DeviceKind::Chorus => Box::new(e2::Chorus::new(sr)),
-        DeviceKind::Corpus => Box::new(e2::Corpus::default()),
-        DeviceKind::DrumBuss => Box::new(e2::DrumBuss::default()),
-        DeviceKind::DynamicTube => Box::new(e2::DynamicTube::default()),
+        DeviceKind::BodyResonator => Box::new(e2::BodyResonator::default()),
+        DeviceKind::DrumShaper => Box::new(e2::DrumShaper::default()),
+        DeviceKind::TubeDrive => Box::new(e2::TubeDrive::default()),
         DeviceKind::Eq8 => Box::new(e2::Eq8::default()),
-        DeviceKind::Erosion => Box::new(e2::Erosion::new()),
-        DeviceKind::FilterDelay => Box::new(e2::FilterDelay::new(sr)),
+        DeviceKind::Degrader => Box::new(e2::Degrader::new()),
+        DeviceKind::TripleDelay => Box::new(e2::TripleDelay::new(sr)),
         DeviceKind::Flanger => Box::new(e2::Flanger::new(sr)),
         DeviceKind::FreqShifter => Box::new(e2::FreqShifter::default()),
         DeviceKind::Gate => Box::new(e2::Gate::default()),
-        DeviceKind::GlueCompressor => Box::new(e2::Glue::default()),
+        DeviceKind::BusCompressor => Box::new(e2::BusComp::default()),
         DeviceKind::GrainDelay => Box::new(e2::GrainDelay::new(sr)),
         DeviceKind::Multiband => Box::new(e2::Multiband::default()),
         DeviceKind::Overdrive => Box::new(e2::Overdrive::default()),
-        DeviceKind::Pedal => Box::new(e2::Pedal::default()),
+        DeviceKind::Stompbox => Box::new(e2::Stompbox::default()),
         DeviceKind::Phaser => Box::new(e2::Phaser::default()),
         DeviceKind::PingPong => Box::new(e2::PingPong::new(sr)),
-        DeviceKind::Resonators => Box::new(e2::Resonators::new(sr)),
-        DeviceKind::SimpleDelay => Box::new(e2::SimpleDelay::new(sr)),
+        DeviceKind::ChordResonator => Box::new(e2::ChordResonator::new(sr)),
+        DeviceKind::StereoDelay => Box::new(e2::StereoDelay::new(sr)),
         DeviceKind::Vinyl => Box::new(e2::Vinyl::default()),
-        DeviceKind::Spectrum => Box::new(e2::Spectrum::new(sr)),
+        DeviceKind::Analyzer => Box::new(e2::Analyzer::new(sr)),
         DeviceKind::Tuner => Box::new(e2::Tuner::new(sr)),
         DeviceKind::Vocoder => Box::new(e2::Vocoder::new(sr)),
         DeviceKind::ChannelEq => Box::new(e2::ChannelEq::default()),
@@ -76,7 +76,7 @@ pub fn mix_gains(m: f32) -> (f32, f32) {
 // ---------------------------------------------------------------------------------------------
 
 #[derive(Default)]
-struct AutoFilter {
+struct FilterSweep {
     mode: Option<FilterMode>,
     cutoff: f32,
     q: f32,
@@ -87,7 +87,7 @@ struct AutoFilter {
     f: [[Svf; 2]; 2],
 }
 
-impl Effect for AutoFilter {
+impl Effect for FilterSweep {
     fn set_params(&mut self, p: &[f32], _: &Ctx) {
         self.mode = Some(match p[0].round() as i32 {
             1 => FilterMode::High,
@@ -131,11 +131,11 @@ impl Effect for AutoFilter {
 // ---------------------------------------------------------------------------------------------
 
 #[derive(Default)]
-struct Eq3 {
+struct DjEq {
     b: [[Biquad; 3]; 2],
 }
 
-impl Effect for Eq3 {
+impl Effect for DjEq {
     fn set_params(&mut self, p: &[f32], ctx: &Ctx) {
         for ch in &mut self.b {
             ch[0].low_shelf(p[3], p[0], ctx.sr);
@@ -511,7 +511,7 @@ impl Effect for Sidechain {
 // ---------------------------------------------------------------------------------------------
 
 #[derive(Default)]
-struct Redux {
+struct Bitcrusher {
     steps: f32,
     down: f32,
     counter: f32,
@@ -520,7 +520,7 @@ struct Redux {
     wet: f32,
 }
 
-impl Effect for Redux {
+impl Effect for Bitcrusher {
     fn set_params(&mut self, p: &[f32], _: &Ctx) {
         self.steps = 2f32.powf(p[0]) / 2.0;
         self.down = p[1];

@@ -428,7 +428,7 @@ impl App {
         }
     }
 
-    /// Drops a sample onto a clip slot: audio tracks get an audio clip, Simpler loads it,
+    /// Drops a sample onto a clip slot: audio tracks get an audio clip, Sampler loads it,
     /// drum tracks put it on the selected lane.
     fn drop_sample_on_slot(&mut self, track: u64, scene: usize, path: &std::path::Path) {
         let Some(t) = self.project.track(track) else { return };
@@ -439,18 +439,18 @@ impl App {
                     self.create_clip(track, scene, c);
                 }
             }
-            InstrumentKind::Simpler => {
+            InstrumentKind::Sampler => {
                 let p = path.to_string_lossy().to_string();
                 if samples::load(&p).is_ok() {
                     if let Some(t) = self.project.track_mut(track) {
                         t.instrument.samples[0] = Some(p);
                     }
                     self.touch();
-                    self.toast("Sample loaded into Simpler");
+                    self.toast("Sample loaded into Sampler");
                 }
             }
             InstrumentKind::Drums => self.assign_sample(Some(track), self.drum_lane, path),
-            _ => self.toast("Drop samples on an audio track, a Simpler or a drum lane"),
+            _ => self.toast("Drop samples on an audio track, a Sampler or a drum lane"),
         }
     }
 
@@ -636,7 +636,7 @@ impl App {
         self.touch();
     }
 
-    /// Tracks shown as Session columns (members of folded groups are hidden).
+    /// Tracks shown as Launcher columns (members of folded groups are hidden).
     pub(super) fn visible_tracks(&self) -> Vec<u64> {
         self.project
             .tracks
@@ -966,7 +966,7 @@ impl App {
         }
     }
 
-    /// Session recording: if the track isn't playing anything, create and launch a new clip.
+    /// Launcher recording: if the track isn't playing anything, create and launch a new clip.
     fn ensure_record_clip(&mut self, track: u64) {
         let Some(ts) = self.track_status(track).cloned() else { return };
         if ts.playing.is_some() || ts.queued.is_some() || (ts.follow_arr && ts.arr_clip.is_some()) {
@@ -1281,8 +1281,8 @@ impl App {
     fn info_view(&mut self, ui: &mut egui::Ui) {
         let (title, body) = self.info.clone().unwrap_or_else(|| {
             (
-                "Info View".into(),
-                "Hover over any control to see what it does.\n\nTab: Session/Arrangement\nShift+Tab: Clip/Device view\nSpace: Play/Stop\nA-K row: play notes, Z/X octave\nCtrl+Z/Y: Undo/Redo".into(),
+                "Help Panel".into(),
+                "Hover over any control to see what it does.\n\nTab: Launcher/Timeline\nShift+Tab: Clip/Device view\nSpace: Play/Stop\nA-K row: play notes, Z/X octave\nCtrl+Z/Y: Undo/Redo".into(),
             )
         });
         ui.label(egui::RichText::new(title).strong().size(12.5));

@@ -91,7 +91,7 @@ pub static INSTRUMENT_PRESETS: &[InstrumentPreset] = &[
     InstrumentPreset {
         name: "Nexa",
         kind: InstrumentKind::Nexa,
-        info: "Nexus-style ROMpler. Pick a sound from the preset browser in the Device View.",
+        info: "preset ROMpler. Pick a sound from the preset browser in the Device Chain.",
         overrides: || vec![],
     },
     InstrumentPreset {
@@ -203,26 +203,26 @@ pub static INSTRUMENT_PRESETS: &[InstrumentPreset] = &[
         },
     },
     InstrumentPreset {
-        name: "Simpler",
-        kind: InstrumentKind::Simpler,
+        name: "Sampler",
+        kind: InstrumentKind::Sampler,
         info: "Empty sampler. Drop a WAV from the Samples browser onto it, then play it across the keyboard.",
         overrides: || vec![],
     },
     InstrumentPreset {
         name: "Loop Slicer",
-        kind: InstrumentKind::Simpler,
+        kind: InstrumentKind::Sampler,
         info: "Slice mode: the sample is cut into 16 slices on C1 upwards, synced to the tempo. Load a drum break and rearrange it.",
         overrides: || vec![(simpler::MODE, 2.0), (simpler::SLICES, 16.0), (simpler::WARP, 1.0), (simpler::BEATS, 4.0), (simpler::RELEASE, 0.02)],
     },
     InstrumentPreset {
         name: "Sampled Keys",
-        kind: InstrumentKind::Simpler,
+        kind: InstrumentKind::Sampler,
         info: "Classic mode with loop and a soft envelope for playing samples like a keyboard.",
         overrides: || vec![(simpler::LOOP, 1.0), (simpler::ATTACK, 0.01), (simpler::RELEASE, 0.4), (simpler::CUTOFF, 6000.0)],
     },
     InstrumentPreset {
         name: "FM Bell",
-        kind: InstrumentKind::Operator,
+        kind: InstrumentKind::Fm4,
         info: "Glassy FM bell - inharmonic ratio with a long decay.",
         overrides: || {
             vec![
@@ -239,7 +239,7 @@ pub static INSTRUMENT_PRESETS: &[InstrumentPreset] = &[
     },
     InstrumentPreset {
         name: "FM Bass",
-        kind: InstrumentKind::Operator,
+        kind: InstrumentKind::Fm4,
         info: "Punchy FM bass with a snappy modulator envelope.",
         overrides: || {
             vec![
@@ -257,7 +257,7 @@ pub static INSTRUMENT_PRESETS: &[InstrumentPreset] = &[
     },
     InstrumentPreset {
         name: "FM E-Piano",
-        kind: InstrumentKind::Operator,
+        kind: InstrumentKind::Fm4,
         info: "DX-style electric piano: two operator pairs.",
         overrides: || {
             vec![
@@ -282,7 +282,7 @@ pub static INSTRUMENT_PRESETS: &[InstrumentPreset] = &[
     },
     InstrumentPreset {
         name: "FM Metal Perc",
-        kind: InstrumentKind::Operator,
+        kind: InstrumentKind::Fm4,
         info: "Short metallic hit for industrial percussion.",
         overrides: || {
             vec![
@@ -301,8 +301,8 @@ pub static INSTRUMENT_PRESETS: &[InstrumentPreset] = &[
         },
     },
     InstrumentPreset {
-        name: "Wavetable Pad",
-        kind: InstrumentKind::Wavetable,
+        name: "Morph Pad",
+        kind: InstrumentKind::Morph,
         info: "Evolving pad - the LFO slowly moves through the formant table.",
         overrides: || {
             vec![
@@ -320,14 +320,14 @@ pub static INSTRUMENT_PRESETS: &[InstrumentPreset] = &[
         },
     },
     InstrumentPreset {
-        name: "Wavetable Lead",
-        kind: InstrumentKind::Wavetable,
+        name: "Morph Lead",
+        kind: InstrumentKind::Morph,
         info: "Bright detuned lead.",
         overrides: || vec![(wavetable::P1, 0.7), (wavetable::MIX, 0.5), (wavetable::CUTOFF, 6000.0), (wavetable::FENV, 0.4), (wavetable::LFO_POS, 0.0)],
     },
     InstrumentPreset {
         name: "Digital Bass",
-        kind: InstrumentKind::Wavetable,
+        kind: InstrumentKind::Morph,
         info: "Gritty digital bass with an envelope sweeping the table.",
         overrides: || {
             vec![
@@ -345,19 +345,19 @@ pub static INSTRUMENT_PRESETS: &[InstrumentPreset] = &[
     },
     InstrumentPreset {
         name: "Plucked String",
-        kind: InstrumentKind::Tension,
+        kind: InstrumentKind::StringModel,
         info: "Karplus-Strong plucked string.",
         overrides: || vec![],
     },
     InstrumentPreset {
         name: "Hammered Dulcimer",
-        kind: InstrumentKind::Tension,
+        kind: InstrumentKind::StringModel,
         info: "Bright hammered string with stiffness.",
         overrides: || vec![(tension::EXCITER, 1.0), (tension::INHARM, 0.3), (tension::DAMPING, 0.2), (tension::BRIGHT, 0.9)],
     },
     InstrumentPreset {
         name: "Bowed Drone",
-        kind: InstrumentKind::Tension,
+        kind: InstrumentKind::StringModel,
         info: "Continuously bowed string - dark techno drones.",
         overrides: || vec![(tension::EXCITER, 2.0), (tension::DECAY, 0.9), (tension::DAMPING, 0.6), (tension::VIBRATO, 0.3), (tension::BODY, 0.6)],
     },
@@ -605,13 +605,13 @@ pub static PATTERNS: &[Pattern] = &[
     },
     Pattern {
         name: "Slices In Order",
-        kind: InstrumentKind::Simpler,
+        kind: InstrumentKind::Sampler,
         bars: 1,
         build: || (0..16).map(|s| n(s, 1, 36 + s as u8, 100)).collect(),
     },
     Pattern {
         name: "Slice Shuffle",
-        kind: InstrumentKind::Simpler,
+        kind: InstrumentKind::Sampler,
         bars: 1,
         build: || {
             let order = [0u8, 1, 2, 3, 0, 1, 6, 7, 8, 9, 2, 3, 12, 6, 14, 15];
@@ -735,14 +735,14 @@ pub fn demo_project() -> Project {
     {
         let t = p.track_mut(ids[4]).unwrap();
         t.channel.devices.push(
-            Device::new(d6, DeviceKind::AutoFilter).with(1, 1400.0).with(3, 0.35).with(4, params::div_index("4 bars") as f32),
+            Device::new(d6, DeviceKind::FilterSweep).with(1, 1400.0).with(3, 0.35).with(4, params::div_index("4 bars") as f32),
         );
         t.channel.devices.push(Device::new(d7, DeviceKind::Sidechain).with(0, 0.75).with(1, 0.3));
         t.channel.sends = [0.4, 0.1];
         t.channel.volume = 0.66;
     }
 
-    // Session clips: (track index, scene, pattern).
+    // Launcher clips: (track index, scene, pattern).
     let layout: &[(usize, usize, &str)] = &[
         (0, 0, "Minimal Groove"),
         (4, 0, "Pad Am-F-C-G"),

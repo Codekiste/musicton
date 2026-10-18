@@ -26,7 +26,7 @@ fn lfo_shape(shape: i32, p: f32, cycle: u32) -> f32 {
 // ---------------------------------------------------------------------------------------------
 
 #[derive(Default)]
-pub struct AutoPan {
+pub struct PanLfo {
     amount: f32,
     rate: f32,
     shape: i32,
@@ -36,7 +36,7 @@ pub struct AutoPan {
     cycle: u32,
 }
 
-impl Effect for AutoPan {
+impl Effect for PanLfo {
     fn set_params(&mut self, p: &[f32], _: &Ctx) {
         self.amount = p[0];
         self.rate = p[1];
@@ -64,7 +64,7 @@ impl Effect for AutoPan {
 
 // ---------------------------------------------------------------------------------------------
 
-pub struct BeatRepeat {
+pub struct Stutter {
     buf: [Vec<f32>; 2],
     w: usize,
     interval: f32,
@@ -86,7 +86,7 @@ pub struct BeatRepeat {
     rng: Rng,
 }
 
-impl BeatRepeat {
+impl Stutter {
     pub fn new(sr: f32) -> Self {
         let n = (sr * 10.0) as usize;
         Self {
@@ -113,7 +113,7 @@ impl BeatRepeat {
     }
 }
 
-impl Effect for BeatRepeat {
+impl Effect for Stutter {
     fn set_params(&mut self, p: &[f32], _: &Ctx) {
         self.interval = named_beats(BEAT_INTERVALS[(p[0].round() as usize).min(BEAT_INTERVALS.len() - 1)]);
         self.offset = p[1] / 4.0;
@@ -246,7 +246,7 @@ const CORPUS_RATIOS: [[f32; 8]; 7] = [
 ];
 
 #[derive(Default)]
-pub struct Corpus {
+pub struct BodyResonator {
     modes: [[Biquad; 8]; 2],
     gains: [f32; 8],
     lp: [OnePole; 2],
@@ -254,7 +254,7 @@ pub struct Corpus {
     wet: f32,
 }
 
-impl Effect for Corpus {
+impl Effect for BodyResonator {
     fn set_params(&mut self, p: &[f32], ctx: &Ctx) {
         let t = (p[0].round() as usize).min(6);
         let f0 = p[1];
@@ -290,7 +290,7 @@ impl Effect for Corpus {
 // ---------------------------------------------------------------------------------------------
 
 #[derive(Default)]
-pub struct DrumBuss {
+pub struct DrumShaper {
     drive: f32,
     crunch: f32,
     damp: [OnePole; 2],
@@ -307,7 +307,7 @@ pub struct DrumBuss {
     out: f32,
 }
 
-impl Effect for DrumBuss {
+impl Effect for DrumShaper {
     fn set_params(&mut self, p: &[f32], ctx: &Ctx) {
         self.drive = p[0];
         self.crunch = p[1];
@@ -365,7 +365,7 @@ impl Effect for DrumBuss {
 // ---------------------------------------------------------------------------------------------
 
 #[derive(Default)]
-pub struct DynamicTube {
+pub struct TubeDrive {
     drive: f32,
     bias: f32,
     tilt: [OnePole; 2],
@@ -377,7 +377,7 @@ pub struct DynamicTube {
     dc: [OnePole; 2],
 }
 
-impl Effect for DynamicTube {
+impl Effect for TubeDrive {
     fn set_params(&mut self, p: &[f32], ctx: &Ctx) {
         self.drive = db_to_gain(p[0]);
         self.bias = p[1] * 0.4;
@@ -417,7 +417,7 @@ impl Effect for DynamicTube {
 }
 
 // ---------------------------------------------------------------------------------------------
-// EQ Eight
+// Parametric EQ
 
 #[derive(Clone, Copy, Default)]
 pub struct Eq8Band {
@@ -460,7 +460,7 @@ pub fn eq8_bands(p: &[f32], sr: f32) -> [Eq8Band; 8] {
     bands
 }
 
-/// Combined EQ Eight response in dB at `f` (for the display).
+/// Combined Parametric EQ response in dB at `f` (for the display).
 pub fn eq8_response(bands: &[Eq8Band; 8], f: f32, sr: f32) -> f32 {
     let mut m = 1.0;
     for b in bands.iter().filter(|b| b.on) {
@@ -509,7 +509,7 @@ impl Effect for Eq8 {
 
 // ---------------------------------------------------------------------------------------------
 
-pub struct Erosion {
+pub struct Degrader {
     d: [DelayLine; 2],
     mode: i32,
     freq: f32,
@@ -519,13 +519,13 @@ pub struct Erosion {
     rng: [Rng; 2],
 }
 
-impl Erosion {
+impl Degrader {
     pub fn new() -> Self {
         Self { d: [DelayLine::new(64), DelayLine::new(64)], mode: 0, freq: 4000.0, amount: 0.3, bp: Default::default(), osc: Osc::default(), rng: [Rng::new(3), Rng::new(99)] }
     }
 }
 
-impl Effect for Erosion {
+impl Effect for Degrader {
     fn set_params(&mut self, p: &[f32], ctx: &Ctx) {
         self.mode = p[0].round() as i32;
         self.freq = p[1];
@@ -554,7 +554,7 @@ impl Effect for Erosion {
 
 // ---------------------------------------------------------------------------------------------
 
-pub struct FilterDelay {
+pub struct TripleDelay {
     lines: [DelayLine; 3],
     bp: [Svf; 3],
     beats: [f32; 3],
@@ -564,7 +564,7 @@ pub struct FilterDelay {
     dry: f32,
 }
 
-impl FilterDelay {
+impl TripleDelay {
     pub fn new(sr: f32) -> Self {
         Self {
             lines: [DelayLine::new((sr * 6.0) as usize), DelayLine::new((sr * 6.0) as usize), DelayLine::new((sr * 6.0) as usize)],
@@ -578,7 +578,7 @@ impl FilterDelay {
     }
 }
 
-impl Effect for FilterDelay {
+impl Effect for TripleDelay {
     fn set_params(&mut self, p: &[f32], ctx: &Ctx) {
         for k in 0..3 {
             let o = k * 4;
@@ -758,7 +758,7 @@ impl Effect for Gate {
 // ---------------------------------------------------------------------------------------------
 
 #[derive(Default)]
-pub struct Glue {
+pub struct BusComp {
     thresh: f32,
     ratio: f32,
     att: f32,
@@ -773,7 +773,7 @@ pub struct Glue {
     gr: f32,
 }
 
-impl Effect for Glue {
+impl Effect for BusComp {
     fn set_params(&mut self, p: &[f32], ctx: &Ctx) {
         self.thresh = p[0];
         self.ratio = [2.0, 4.0, 10.0][(p[1].round() as usize).min(2)];
@@ -1065,7 +1065,7 @@ impl Effect for Overdrive {
 // ---------------------------------------------------------------------------------------------
 
 #[derive(Default)]
-pub struct Pedal {
+pub struct Stompbox {
     typ: i32,
     gain: f32,
     out: f32,
@@ -1077,7 +1077,7 @@ pub struct Pedal {
     wet: f32,
 }
 
-impl Effect for Pedal {
+impl Effect for Stompbox {
     fn set_params(&mut self, p: &[f32], ctx: &Ctx) {
         self.typ = p[0].round() as i32;
         self.gain = p[1];
@@ -1223,7 +1223,7 @@ impl Effect for PingPong {
 
 // ---------------------------------------------------------------------------------------------
 
-pub struct Resonators {
+pub struct ChordResonator {
     lines: [[DelayLine; 5]; 2],
     damp: [[OnePole; 5]; 2],
     periods: [f32; 5],
@@ -1233,14 +1233,14 @@ pub struct Resonators {
     wet: f32,
 }
 
-impl Resonators {
+impl ChordResonator {
     pub fn new(sr: f32) -> Self {
         let mk = || std::array::from_fn(|_| DelayLine::new((sr / 20.0) as usize));
         Self { lines: [mk(), mk()], damp: Default::default(), periods: [100.0; 5], fb: 0.99, width: 0.5, dry: 0.7, wet: 0.7 }
     }
 }
 
-impl Effect for Resonators {
+impl Effect for ChordResonator {
     fn set_params(&mut self, p: &[f32], ctx: &Ctx) {
         let root = p[0];
         let notes = [root, root + p[3], root + p[4], root + p[5], root + p[6]];
@@ -1279,7 +1279,7 @@ impl Effect for Resonators {
 
 // ---------------------------------------------------------------------------------------------
 
-pub struct SimpleDelay {
+pub struct StereoDelay {
     d: [DelayLine; 2],
     t: [Smooth; 2],
     beats: [f32; 2],
@@ -1288,13 +1288,13 @@ pub struct SimpleDelay {
     wet: f32,
 }
 
-impl SimpleDelay {
+impl StereoDelay {
     pub fn new(sr: f32) -> Self {
         Self { d: [DelayLine::new((sr * 6.0) as usize), DelayLine::new((sr * 6.0) as usize)], t: [Smooth::new(sr * 0.25, 0.08, sr); 2], beats: [0.5, 0.75], fb: 0.4, dry: 0.9, wet: 0.4 }
     }
 }
 
-impl Effect for SimpleDelay {
+impl Effect for StereoDelay {
     fn set_params(&mut self, p: &[f32], _: &Ctx) {
         self.beats = [division_beats(p[0]), division_beats(p[1])];
         self.fb = p[2];
@@ -1374,7 +1374,7 @@ impl Effect for Vinyl {
 pub const SPECTRUM_BANDS: usize = 96;
 const FFT_N: usize = 2048;
 
-pub struct Spectrum {
+pub struct Analyzer {
     buf: Vec<f32>,
     w: usize,
     count: usize,
@@ -1385,7 +1385,7 @@ pub struct Spectrum {
     sr: f32,
 }
 
-impl Spectrum {
+impl Analyzer {
     pub fn new(sr: f32) -> Self {
         Self { buf: vec![0.0; FFT_N], w: 0, count: 0, re: vec![0.0; FFT_N], im: vec![0.0; FFT_N], bands: vec![-90.0; SPECTRUM_BANDS], smooth: 0.7, sr }
     }
@@ -1414,7 +1414,7 @@ impl Spectrum {
     }
 }
 
-impl Effect for Spectrum {
+impl Effect for Analyzer {
     fn set_params(&mut self, p: &[f32], _: &Ctx) {
         self.smooth = p[0];
     }

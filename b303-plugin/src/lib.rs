@@ -1,4 +1,5 @@
 //! B-303 as a VST3/CLAP plug-in: the same engine and editor as in Musicton.
+#![allow(semicolon_in_expressions_from_non_local_macros)] // from nih-plug's VST3 export macro
 
 use b303_core::{SeqBank, SeqPattern, B303, SPECS};
 use nih_plug::prelude::*;
@@ -269,7 +270,7 @@ impl Plugin for B303Plugin {
 
 impl ClapPlugin for B303Plugin {
     const CLAP_ID: &'static str = "media.ackermann.musicton.b303";
-    const CLAP_DESCRIPTION: Option<&'static str> = Some("TB-303 style bassline with internal sequencer");
+    const CLAP_DESCRIPTION: Option<&'static str> = Some("acid bassline with internal sequencer");
     const CLAP_MANUAL_URL: Option<&'static str> = Some(Self::URL);
     const CLAP_SUPPORT_URL: Option<&'static str> = None;
     const CLAP_FEATURES: &'static [ClapFeature] = &[ClapFeature::Instrument, ClapFeature::Synthesizer, ClapFeature::Mono];

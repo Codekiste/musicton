@@ -1,4 +1,4 @@
-//! The B-303 editor (Roland-Cloud-style front panel), shared by Musicton's plug-in window and
+//! The B-303 editor (classic silver front panel), shared by Musicton's plug-in window and
 //! the VST3/CLAP plug-in. Hosts connect it to their state through the [`Host`] trait.
 
 use b303_core::{p, random_pattern, SeqPattern, SeqStep, SPECS};
@@ -708,8 +708,8 @@ pub fn editor(ui: &mut egui::Ui, host: &mut dyn Host, st: &mut EditorState) {
         let r = c.rect(300.0, 120.0, 500.0, 110.0);
         c.p.rect_filled(r, 6.0 * s, Color32::from_rgba_unmultiplied(20, 20, 22, 235));
         c.text(550.0, 140.0, Align2::CENTER_CENTER, "B-303 Bass Line", 18.0, Color32::WHITE);
-        c.text(550.0, 170.0, Align2::CENTER_CENTER, "Musicton's TB-303 style bassline with internal sequencer.", 11.0, TEXT);
-        c.text(550.0, 190.0, Align2::CENTER_CENTER, "Not affiliated with Roland. Click ABOUT to close.", 10.0, TEXT_DIM);
+        c.text(550.0, 170.0, Align2::CENTER_CENTER, "Musicton's acid bassline with internal sequencer.", 11.0, TEXT);
+        c.text(550.0, 190.0, Align2::CENTER_CENTER, "Click ABOUT to close.", 10.0, TEXT_DIM);
     }
     let _ = sel_pitch;
     if pat_changed {

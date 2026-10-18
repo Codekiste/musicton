@@ -91,7 +91,7 @@ impl App {
             let pos = self.status.arr_pos.max(0.0) as u32;
             let txt = format!("{:>3}. {}. {}", pos / STEPS_PER_BAR + 1, (pos % STEPS_PER_BAR) / 4 + 1, pos % 4 + 1);
             let r = ui.add(egui::Label::new(egui::RichText::new(txt).monospace().size(13.0).color(ACCENT)).sense(Sense::click()));
-            self.hint(&r, "Arrangement Position", "Current song position in bars, beats and sixteenths.");
+            self.hint(&r, "Timeline Position", "Current song position in bars, beats and sixteenths.");
 
             let r = icon_button(ui, Icon::Play, self.status.playing, PLAY);
             if r.clicked() {
@@ -111,17 +111,17 @@ impl App {
             }
             self.hint(&r, "Record", "When enabled, notes you play (computer keys or MIDI) are recorded into the playing clip of the selected track. If nothing is playing, a new clip is created (F9).");
 
-            let r = widgets::toggle(ui, "Arr Rec", self.arr_rec, REC, vec2(50.0, 19.0));
+            let r = widgets::toggle(ui, "Timeline Rec", self.arr_rec, REC, vec2(50.0, 19.0));
             if r.clicked() {
                 self.arr_rec = !self.arr_rec;
             }
-            self.hint(&r, "Arrangement Record", "Records your Session performance into the Arrangement: every clip you launch is written onto the timeline at the current position.");
+            self.hint(&r, "Timeline Record", "Records your Launcher performance into the Timeline: every clip you launch is written onto the timeline at the current position.");
 
             let r = widgets::button(ui, "Capture", false);
             if r.clicked() {
                 self.capture_midi();
             }
-            self.hint(&r, "Capture MIDI", "Turns what you just played on the selected track into a new clip - even if Record was off.");
+            self.hint(&r, "Recall MIDI", "Turns what you just played on the selected track into a new clip - even if Record was off.");
 
             ui.separator();
             let r = widgets::toggle(ui, "Loop", self.project.loop_on, ACCENT, vec2(40.0, 19.0));
@@ -129,7 +129,7 @@ impl App {
                 self.project.loop_on = !self.project.loop_on;
                 self.touch();
             }
-            self.hint(&r, "Arrangement Loop", "Loops the arrangement between the loop brace start and end.");
+            self.hint(&r, "Timeline Loop", "Loops the arrangement between the loop brace start and end.");
             let mut ls = self.project.loop_start / STEPS_PER_BAR + 1;
             let mut ll = self.project.loop_len / STEPS_PER_BAR;
             let r1 = ui.add(egui::DragValue::new(&mut ls).range(1..=999).speed(0.1));
@@ -144,11 +144,11 @@ impl App {
 
             let overridden = self.status.tracks.iter().any(|t| !t.follow_arr) && self.project.arrangement_end() > 0;
             if overridden {
-                let r = widgets::toggle(ui, "Back to Arrangement", true, ACCENT, vec2(128.0, 19.0));
+                let r = widgets::toggle(ui, "Back to Timeline", true, ACCENT, vec2(128.0, 19.0));
                 if r.clicked() {
                     self.send(Cmd::BackToArrangement);
                 }
-                self.hint(&r, "Back to Arrangement", "Some tracks play Session clips instead of the Arrangement. Click to return all of them.");
+                self.hint(&r, "Back to Timeline", "Some tracks play Launcher clips instead of the Timeline. Click to return all of them.");
             }
 
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -157,28 +157,28 @@ impl App {
                 if r.clicked() {
                     self.show_info = !self.show_info;
                 }
-                self.hint(&r, "Info View", "Shows or hides this help panel.");
+                self.hint(&r, "Help Panel", "Shows or hides this help panel.");
                 let r = widgets::toggle(ui, "Detail", self.show_detail, BLUE, vec2(42.0, 19.0));
                 if r.clicked() {
                     self.show_detail = !self.show_detail;
                 }
-                self.hint(&r, "Detail View", "Shows or hides the Clip/Device view at the bottom.");
+                self.hint(&r, "Editor Panel", "Shows or hides the Clip/Device view at the bottom.");
                 let r = widgets::toggle(ui, "Browser", self.show_browser, BLUE, vec2(54.0, 19.0));
                 if r.clicked() {
                     self.show_browser = !self.show_browser;
                 }
                 self.hint(&r, "Browser", "Shows or hides the browser with instruments, effects, clips and samples.");
 
-                let r = widgets::toggle(ui, "Arrangement", self.view == View::Arrangement, TEXT, vec2(80.0, 19.0));
+                let r = widgets::toggle(ui, "Timeline", self.view == View::Arrangement, TEXT, vec2(80.0, 19.0));
                 if r.clicked() {
                     self.view = View::Arrangement;
                 }
-                self.hint(&r, "Arrangement View", "Timeline view for building finished tracks (Tab).");
-                let r = widgets::toggle(ui, "Session", self.view == View::Session, TEXT, vec2(56.0, 19.0));
+                self.hint(&r, "Timeline", "Timeline view for building finished tracks (Tab).");
+                let r = widgets::toggle(ui, "Launcher", self.view == View::Session, TEXT, vec2(56.0, 19.0));
                 if r.clicked() {
                     self.view = View::Session;
                 }
-                self.hint(&r, "Session View", "Clip grid for jamming and live performance (Tab).");
+                self.hint(&r, "Launcher", "Clip grid for jamming and live performance (Tab).");
 
                 ui.separator();
                 let cpu = (self.status.cpu * 100.0).min(999.0);

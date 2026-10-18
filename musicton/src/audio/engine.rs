@@ -679,7 +679,7 @@ impl Engine {
                     td.play_chain(gi + 1, out, &fx_ctx);
                 }
             }
-            // Arrangement automation.
+            // Timeline automation.
             let had_auto = !td.auto_vals.is_empty();
             td.auto_vals.clear();
             if td.follow_arr && td.playing.is_none() {
@@ -859,7 +859,7 @@ impl Engine {
             }
         }
         st.reductions.clone_from(&self.reductions);
-        // Analysis displays (Spectrum, Tuner): reuse vectors to avoid allocating per callback.
+        // Analysis displays (Analyzer, Tuner): reuse vectors to avoid allocating per callback.
         let chans = self.tracks.iter().map(|t| &t.ch).chain(self.returns.iter()).chain(std::iter::once(&self.master));
         let mut n = 0;
         for td in &self.tracks {

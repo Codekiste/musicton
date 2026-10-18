@@ -1,5 +1,5 @@
 //! MIDI keyboard input via ALSA (midir). Notes go straight to the engine for low latency and
-//! are also forwarded to the UI for recording and Capture MIDI.
+//! are also forwarded to the UI for recording and Recall MIDI.
 
 use crate::audio::engine::Cmd;
 use crossbeam_channel::Sender;

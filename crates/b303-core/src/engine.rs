@@ -1,4 +1,4 @@
-//! B-303 engine: TB-303 style voice plus internal step sequencer.
+//! B-303 engine: acid voice plus internal step sequencer.
 //!
 //! Signal path: saw/square VCO -> 4-pole nonlinear ladder (2x oversampled) with a high-pass in
 //! the resonance feedback (like the 303's diode ladder) -> VCA -> optional overdrive.

@@ -354,7 +354,7 @@ impl App {
         self.show_mappings = open;
     }
 
-    /// Arrangement record: writes the Session clips that play into the timeline.
+    /// Timeline record: writes the Launcher clips that play into the timeline.
     pub(super) fn update_arr_record(&mut self) {
         if !self.arr_rec || !self.status.playing {
             if !self.rec_segments.is_empty() {

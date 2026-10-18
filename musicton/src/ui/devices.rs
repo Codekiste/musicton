@@ -1,4 +1,4 @@
-//! Device View: instrument panel and audio effect chain of the selected track.
+//! Device Chain: instrument panel and audio effect chain of the selected track.
 
 use super::theme::*;
 use super::widgets;
@@ -68,7 +68,7 @@ impl App {
                 ui.set_width(200.0);
                 ui.label(RichText::new("Group Track").strong().color(ACCENT));
                 ui.add_space(6.0);
-                ui.label(RichText::new("All tracks in this group are summed here. Effects added to the right process the whole group (e.g. a Glue Compressor on all drums).").size(11.0).color(TEXT_DIM));
+                ui.label(RichText::new("All tracks in this group are summed here. Effects added to the right process the whole group (e.g. a Bus Compressor on all drums).").size(11.0).color(TEXT_DIM));
             });
             return;
         }
@@ -184,7 +184,7 @@ impl App {
                         });
                     });
                 }
-                InstrumentKind::Operator => {
+                InstrumentKind::Fm4 => {
                     ui.horizontal_top(|ui| {
                         ui.vertical(|ui| {
                             for (k, name) in ["A", "B", "C", "D"].iter().enumerate() {
@@ -194,7 +194,7 @@ impl App {
                                         let idx = k * params::OP_PARAMS + j;
                                         let r = widgets::knob(ui, &mut inst.params[idx], &defs[idx], 22.0, false);
                                         r.context_menu(|ui| self.map_menu(ui, MapTarget::Instrument(track, idx), Some(track)));
-                                        let txt = format!("Operator {name} {}: {}", defs[idx].name, defs[idx].format(inst.params[idx]));
+                                        let txt = format!("Fm4 {name} {}: {}", defs[idx].name, defs[idx].format(inst.params[idx]));
                                         self.param_hint(&r, &defs[idx], &txt);
                                         if r.changed() {
                                             self.info = Some((format!("Op {name} {}", defs[idx].name), defs[idx].format(inst.params[idx])));
@@ -212,7 +212,7 @@ impl App {
                                     for idx in row {
                                         let r = widgets::param(ui, ("inst", track, idx), &mut inst.params[idx], &defs[idx], KNOB);
                                         r.context_menu(|ui| self.map_menu(ui, MapTarget::Instrument(track, idx), Some(track)));
-                                        self.param_hint(&r, &defs[idx], "Operator global parameter. The algorithm decides which operators modulate which (carriers are heard, modulators shape the timbre).");
+                                        self.param_hint(&r, &defs[idx], "Fm4 global parameter. The algorithm decides which operators modulate which (carriers are heard, modulators shape the timbre).");
                                     }
                                 });
                             }
@@ -220,7 +220,7 @@ impl App {
                     });
                 }
                 _ => {
-                    if kind == InstrumentKind::Simpler {
+                    if kind == InstrumentKind::Sampler {
                         self.simpler_sample_view(ui, track, &mut inst);
                     }
                     let rows = defs.len().div_ceil(12).max(2);
@@ -429,7 +429,7 @@ impl App {
             }
         }
         let _ = track;
-        self.hint(&resp, "Simpler Sample", "The loaded sample. Shaded areas are outside Start/End. In Slice mode the orange lines show which key (from C1) plays which slice. Click to load a WAV or drop one from the browser.");
+        self.hint(&resp, "Sampler Sample", "The loaded sample. Shaded areas are outside Start/End. In Slice mode the orange lines show which key (from C1) plays which slice. Click to load a WAV or drop one from the browser.");
     }
 
     /// Min/max peaks of a sample for waveform drawing (cached per path and width).
@@ -505,7 +505,7 @@ impl App {
             ui.horizontal_top(|ui| {
                 match d.kind {
                     DeviceKind::Eq8 => self.eq8_ui(ui, &mut d),
-                    DeviceKind::Spectrum => self.spectrum_ui(ui, &mut d),
+                    DeviceKind::Analyzer => self.spectrum_ui(ui, &mut d),
                     DeviceKind::Tuner => self.tuner_ui(ui, &mut d),
                     _ => {
                         ui.vertical(|ui| {
@@ -610,7 +610,7 @@ impl App {
 fn instrument_param_info(kind: InstrumentKind, idx: usize) -> &'static str {
     use params::{bass, synth};
     match (kind, idx) {
-        (InstrumentKind::Bass, bass::CUTOFF) => "Filter cutoff - the heart of the acid sound. Automate it in the Arrangement for sweeps.",
+        (InstrumentKind::Bass, bass::CUTOFF) => "Filter cutoff - the heart of the acid sound. Automate it in the Timeline for sweeps.",
         (InstrumentKind::Bass, bass::RES) => "Filter resonance. High values give the squelchy 303 scream.",
         (InstrumentKind::Bass, bass::ENV_MOD) => "How far the filter envelope opens the cutoff on every note.",
         (InstrumentKind::Bass, bass::DECAY) => "Filter envelope decay time.",
@@ -710,7 +710,7 @@ impl App {
                     d.params[o] = (d.params[o] * if scroll > 0.0 { 1.15 } else { 1.0 / 1.15 }).clamp(0.1, 18.0);
                 }
             }
-            self.hint(&resp, "EQ Eight Display", "Drag a numbered dot to change frequency and gain of that band, mouse wheel changes its Q. Click the band buttons below to switch bands on/off.");
+            self.hint(&resp, "Parametric EQ Display", "Drag a numbered dot to change frequency and gain of that band, mouse wheel changes its Q. Click the band buttons below to switch bands on/off.");
             ui.horizontal(|ui| {
                 for b in 0..8 {
                     let o = b * EQ8_BAND_PARAMS;
@@ -785,7 +785,7 @@ impl App {
             } else {
                 p.text(rect.center(), egui::Align2::CENTER_CENTER, "Play something to see its spectrum", egui::FontId::proportional(11.0), TEXT_DIM);
             }
-            self.hint(&resp, "Spectrum", "Real-time frequency analysis of the signal at this point in the chain (20 Hz - 20 kHz, 0 to -90 dB).");
+            self.hint(&resp, "Analyzer", "Real-time frequency analysis of the signal at this point in the chain (20 Hz - 20 kHz, 0 to -90 dB).");
         });
         let defs = d.kind.defs();
         let r = widgets::param(ui, ("spec", d.id), &mut d.params[0], &defs[0], KNOB);

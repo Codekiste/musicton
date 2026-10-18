@@ -854,7 +854,7 @@ impl App {
                 Ok(json!("ok"))
             }
 
-            // Arrangement
+            // Timeline
             "scenes_to_arrangement" => {
                 self.scenes_to_arrangement();
                 Ok(json!({ "arrangement_bars": self.project.arrangement_end() as f32 / 16.0 }))

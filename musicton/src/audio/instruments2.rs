@@ -1,4 +1,4 @@
-//! Simpler (sampler), Operator (FM), Wavetable and Tension (physical string).
+//! Sampler (sampler), Fm4 (FM), Morph and StringModel (physical string).
 
 use super::dsp::*;
 use super::instruments::InstrumentDsp;
@@ -19,7 +19,7 @@ fn pick_voice<T>(voices: &[T], active: impl Fn(&T) -> bool, released: impl Fn(&T
 }
 
 // ---------------------------------------------------------------------------------------------
-// Simpler
+// Sampler
 
 #[derive(Default)]
 struct SVoice {
@@ -41,7 +41,7 @@ struct SVoice {
     age: u64,
 }
 
-pub struct Simpler {
+pub struct Sampler {
     sr: f32,
     p: Vec<f32>,
     sample: Option<Arc<Sample>>,
@@ -52,7 +52,7 @@ pub struct Simpler {
     last_rate: f64,
 }
 
-impl Simpler {
+impl Sampler {
     pub fn new(sr: f32) -> Self {
         Self {
             sr,
@@ -67,7 +67,7 @@ impl Simpler {
     }
 }
 
-impl InstrumentDsp for Simpler {
+impl InstrumentDsp for Sampler {
     fn set_params(&mut self, p: &[f32], samples_: &[Option<String>]) {
         self.p.clear();
         self.p.extend_from_slice(p);
@@ -226,7 +226,7 @@ impl InstrumentDsp for Simpler {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Operator
+// Fm4
 
 /// mods[target][source]: which operators modulate which. Operators are processed D, C, B, A.
 const ALGOS: [([[bool; 4]; 4], [bool; 4]); 8] = {
@@ -261,14 +261,14 @@ struct OVoice {
     pan: f32,
 }
 
-pub struct Operator {
+pub struct Fm4 {
     sr: f32,
     p: Vec<f32>,
     voices: Vec<OVoice>,
     age: u64,
 }
 
-impl Operator {
+impl Fm4 {
     pub fn new(sr: f32) -> Self {
         Self { sr, p: params::defaults(&params::OPERATOR_PARAMS), voices: (0..12).map(|_| OVoice::default()).collect(), age: 0 }
     }
@@ -283,7 +283,7 @@ impl Operator {
     }
 }
 
-impl InstrumentDsp for Operator {
+impl InstrumentDsp for Fm4 {
     fn set_params(&mut self, p: &[f32], _: &[Option<String>]) {
         self.p.clear();
         self.p.extend_from_slice(p);
@@ -396,7 +396,7 @@ impl InstrumentDsp for Operator {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Wavetable
+// Morph
 
 const WT_SIZE: usize = 2048;
 const WT_FRAMES: usize = 32;
@@ -513,7 +513,7 @@ struct WVoice {
     age: u64,
 }
 
-pub struct Wavetable {
+pub struct Morph {
     sr: f32,
     p: Vec<f32>,
     voices: Vec<WVoice>,
@@ -522,14 +522,14 @@ pub struct Wavetable {
     bpm: f32,
 }
 
-impl Wavetable {
+impl Morph {
     pub fn new(sr: f32) -> Self {
         LazyLock::force(&TABLES);
         Self { sr, p: params::defaults(&params::WAVETABLE_PARAMS), voices: (0..10).map(|_| WVoice::default()).collect(), age: 0, lfo: 0.0, bpm: 120.0 }
     }
 }
 
-impl InstrumentDsp for Wavetable {
+impl InstrumentDsp for Morph {
     fn set_params(&mut self, p: &[f32], _: &[Option<String>]) {
         self.p.clear();
         self.p.extend_from_slice(p);
@@ -647,7 +647,7 @@ impl InstrumentDsp for Wavetable {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Tension
+// StringModel
 
 struct TVoice {
     active: bool,
@@ -669,7 +669,7 @@ struct TVoice {
     pick: DelayLine,
 }
 
-pub struct Tension {
+pub struct StringModel {
     sr: f32,
     p: Vec<f32>,
     voices: Vec<TVoice>,
@@ -677,7 +677,7 @@ pub struct Tension {
     age: u64,
 }
 
-impl Tension {
+impl StringModel {
     pub fn new(sr: f32) -> Self {
         let mk = |i: u32| TVoice {
             active: false,
@@ -705,7 +705,7 @@ impl Tension {
     }
 }
 
-impl InstrumentDsp for Tension {
+impl InstrumentDsp for StringModel {
     fn set_params(&mut self, p: &[f32], _: &[Option<String>]) {
         self.p.clear();
         self.p.extend_from_slice(p);

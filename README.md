@@ -1,8 +1,8 @@
 # Musicton
 
-Eine Techno-DAW für Linux in Rust, gebaut für Jammen, Live-Performance und Produktion: Session View zum Jammen und Live-Spielen, Arrangement View zum Fertigstellen von Tracks, eingebaute Instrumente, 36 Audio-Effekte, MIDI-Effekte, Audiospuren mit Warping und MIDI-Controller-Mapping.
+Eine Techno-DAW für Linux in Rust, gebaut für Jammen, Live-Performance und Produktion: Launcher zum Jammen und Live-Spielen, Timeline zum Fertigstellen von Tracks, eingebaute Instrumente, 36 Audio-Effekte, MIDI-Effekte, Audiospuren mit Warping und MIDI-Controller-Mapping.
 
-Das Repo enthält außerdem den **B-303** (TB-303-artige Bassline mit Sequencer) als eigenständiges **VST3/CLAP-Plugin** für andere DAWs, mit derselben Klangerzeugung und Oberfläche wie in Musicton.
+Das Repo enthält außerdem den **B-303** (acid-artige Bassline mit Sequencer) als eigenständiges **VST3/CLAP-Plugin** für andere DAWs, mit derselben Klangerzeugung und Oberfläche wie in Musicton.
 
 ## Repo-Aufbau
 
@@ -45,14 +45,14 @@ Audio läuft über ALSA bzw. PipeWire/PulseAudio (Standardgerät). Ein angeschlo
 ## Funktionen
 
 **Ansichten**
-- Session View: Clip-Raster mit Szenen, Clip-Stop-Buttons, Mixer mit Sends, Pan, Fadern mit Metern, Solo/Activator, Crossfader-Zuweisung A/B
-- Arrangement View: Timeline, Loop-Klammer, Start-Marker, Clips verschieben, loopen und kürzen, zwischen Spuren ziehen, Automations-Lanes mit Breakpoints für jeden Parameter
-- Detail View: Clip View (Step-Sequencer, Piano Roll mit Velocity-, Accent- und Slide-Lane, Audio-Clip-Editor) und Device View (Kette aus Macros, MIDI-Effekten, Instrument und Audio-Effekten)
-- Browser mit Kategorien und Suche, Info View (Hover-Hilfe zu jedem Element)
+- Launcher: Clip-Raster mit Szenen, Clip-Stop-Buttons, Mixer mit Sends, Pan, Fadern mit Metern, Solo/Activator, Crossfader-Zuweisung A/B
+- Timeline: Timeline, Loop-Klammer, Start-Marker, Clips verschieben, loopen und kürzen, zwischen Spuren ziehen, Automations-Lanes mit Breakpoints für jeden Parameter
+- Editor Panel: Clip Editor (Step-Sequencer, Piano Roll mit Velocity-, Accent- und Slide-Lane, Audio-Clip-Editor) und Device Chain (Kette aus Macros, MIDI-Effekten, Instrument und Audio-Effekten)
+- Browser mit Kategorien und Suche, Help Panel (Hover-Hilfe zu jedem Element)
 
-**Instrumente:** B-303 Bassline (TB-303-Nachbau: Diodenkaskaden-artiges Filter, Accent-Sweep, Slide, interner Sequencer mit 8 Patterns, Shuffle, Scale, 5 Play-Modes, Drive- und Delay-Sektion, eigenes Plugin-Fenster im Stil der Roland-Cloud-Version) · Nexa (Nexus-artiger Rompler: 53 Presets in 10 Kategorien, bis zu 4 Layer, Macros, Arpeggiator, Trancegate, Effekte) · Drum Machine (10 Lanes, synthetisiert oder mit WAV pro Lane) · Acid Bass (303-Style mit Accent/Slide) · Poly Synth · Simpler (Classic/One-Shot/Slice, Tempo-Sync) · Operator (4-OP FM, 8 Algorithmen) · Wavetable (5 Tabellen, LFO/Env auf Position) · Tension (Karplus-Strong-Saite)
+**Instrumente:** B-303 Bassline (Acid-Bassline: Diodenkaskaden-artiges Filter, Accent-Sweep, Slide, interner Sequencer mit 8 Patterns, Shuffle, Scale, 5 Play-Modes, Drive- und Delay-Sektion, eigenes Plugin-Fenster) · Nexa (Preset-Rompler: 53 Presets in 10 Kategorien, bis zu 4 Layer, Macros, Arpeggiator, Trancegate, Effekte) · Drum Machine (10 Lanes, synthetisiert oder mit WAV pro Lane) · Acid Bass (303-Style mit Accent/Slide) · Poly Synth · Sampler (Classic/One-Shot/Slice, Tempo-Sync) · FM4 (4-Operator-FM, 8 Algorithmen) · Morph (Wavetable-Synth, 5 Tabellen, LFO/Env auf Position) · String Model (Karplus-Strong-Saite)
 
-**Audio-Effekte (36):** Auto Filter, Auto Pan, Beat Repeat, Channel EQ, Chorus, Compressor, Corpus, Drum Buss, Dynamic Tube, Echo, EQ Eight (mit Kurve), EQ Three, Erosion, Filter Delay, Flanger, Frequency Shifter, Gate, Glue Compressor, Grain Delay, Limiter, Multiband Dynamics (OTT-fähig), Overdrive, Pedal, Phaser, Ping Pong Delay, Redux, Resonators, Reverb, Saturator, Sidechain, Simple Delay, Spectrum, Tuner, Utility, Vinyl Distortion, Vocoder
+**Audio-Effekte (36):** Filter Sweep, Pan LFO, Stutter, Channel EQ, Chorus, Compressor, Body Resonator, Drum Shaper, Tube Drive, Echo, Parametric EQ (mit Kurve), DJ EQ, Degrader, Triple Delay, Flanger, Frequency Shifter, Gate, Bus Compressor, Grain Delay, Limiter, Multiband Compressor (OTT-fähig), Overdrive, Pedal, Phaser, Ping Pong Delay, Bitcrusher, Chord Resonator, Reverb, Saturator, Sidechain, Stereo Delay, Spectrum, Tuner, Utility, Vinyl, Vocoder
 
 **MIDI-Effekte:** Arpeggiator, Chord, Note Length, Pitch, Random, Scale, Velocity
 
@@ -60,9 +60,9 @@ Audio läuft über ALSA bzw. PipeWire/PulseAudio (Standardgerät). Ein angeschlo
 
 **Plugin-Fenster:** B-303 und Nexa erscheinen in der Device-Kette als kompakter Plugin-Device mit den wichtigsten Parametern. Der 🔧-Button (oder Doppelklick auf den Titel) öffnet den Editor in einem eigenen Fenster, Ctrl+Alt+P blendet alle Plugin-Fenster ein/aus. Neue B-303/Nexa-Spuren öffnen ihr Fenster automatisch.
 
-**Live-Performance:** Clip- und Szenen-Launch mit globaler Quantisierung · Follow Actions · Gruppenspuren (Ctrl+G) · Rack-Macros · Crossfader · MIDI-Learn und Tastatur-Mapping für jeden Regler, Clip und jede Szene (Rechtsklick) · Arrangement Record (Session-Performance auf die Timeline aufnehmen) · Capture MIDI · Session Record · Back to Arrangement · Tap Tempo, Swing, Metronom
+**Live-Performance:** Clip- und Szenen-Launch mit globaler Quantisierung · Next Actions · Gruppenspuren (Ctrl+G) · Rack-Macros · Crossfader · MIDI-Learn und Tastatur-Mapping für jeden Regler, Clip und jede Szene (Rechtsklick) · Timeline Record (Launcher-Performance auf die Timeline aufnehmen) · Recall MIDI · Launcher Record · Back to Timeline · Tap Tempo, Swing, Metronom
 
-**Projekt:** Speichern/Laden (`.mton`), Autosave, Undo/Redo, Export als WAV (16/24/32 Bit, Arrangement oder Szene, Master oder einzelne Spuren/Stems)
+**Projekt:** Speichern/Laden (`.mton`), Autosave, Undo/Redo, Export als WAV (16/24/32 Bit, Timeline oder Szene, Master oder einzelne Spuren/Stems)
 
 ## Samples
 
@@ -75,8 +75,8 @@ Audio läuft über ALSA bzw. PipeWire/PulseAudio (Standardgerät). Ein angeschlo
 | Taste | Funktion |
 |---|---|
 | Leertaste | Play/Stop |
-| Tab | Session ↔ Arrangement |
-| Shift+Tab | Clip View ↔ Device View |
+| Tab | Launcher ↔ Timeline |
+| Shift+Tab | Clip Editor ↔ Device Chain |
 | A W S E D F T G Y H U J K O L P | Noten spielen (auf Drum-Spuren: Lanes) |
 | Z / X | Oktave runter/hoch |
 | C / V | Velocity runter/hoch |
@@ -89,7 +89,7 @@ Audio läuft über ALSA bzw. PipeWire/PulseAudio (Standardgerät). Ein angeschlo
 | Ctrl+Z / Ctrl+Y | Undo/Redo |
 | Ctrl+S / Ctrl+O / Ctrl+N | Speichern/Öffnen/Neu |
 | Ctrl+E | Export |
-| Ctrl+Mausrad | Arrangement zoomen |
+| Ctrl+Mausrad | Timeline zoomen |
 
 ## Noch nicht enthalten
 
@@ -102,7 +102,7 @@ Musicton öffnet beim Start einen lokalen Steuer-Port (`127.0.0.1:47800`, nur lo
 Die 46 Tools decken ab:
 - **Zustand:** Projekt, Spuren, Clips mit Noten, Devices mit allen Parametern, Meter
 - **Transport und Launch:** Abspielen, Stoppen, Clips und Szenen starten
-- **Bearbeiten:** Spuren, Clips, Noten, Devices, Parameter, Automation, Arrangement
+- **Bearbeiten:** Spuren, Clips, Noten, Devices, Parameter, Automation, Timeline
 - **Messen:** Offline-Rendern mit Pegelanalyse (Peak, RMS, Clipping, Bass/Mitten/Höhen-Verteilung)
 - **Oberfläche:** Screenshots und Maus-/Tastatur-Eingaben
 
@@ -121,4 +121,4 @@ Debug-Hilfen: `MUSICTON_SHOT=datei.ppm` rendert einige Frames, speichert einen S
 
 ## Lizenz
 
-GPL-3.0-or-later (siehe `LICENSE`). Die VST3-Anbindung des Plugins setzt die GPLv3 voraus. „TB-303“ und „Nexus“ sind Marken ihrer Inhaber; Musicton ist ein unabhängiges Projekt und mit ihnen nicht verbunden.
+GPL-3.0-or-later (siehe `LICENSE`). Die VST3-Anbindung des Plugins setzt die GPLv3 voraus. „acid bassline“ und „ROMpler“ sind Marken ihrer Inhaber; Musicton ist ein unabhängiges Projekt und mit ihnen nicht verbunden.

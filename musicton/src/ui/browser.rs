@@ -25,7 +25,7 @@ const CATEGORIES: [(Category, &str, &str); 7] = [
     (Category::AudioEffects, "Audio Effects", "Effects you can drop onto any track, return or the master."),
     (Category::MidiEffects, "MIDI Effects", "Note processors that sit before the instrument: arpeggiator, chords, scales and more."),
     (Category::Clips, "Clips", "Ready-made MIDI patterns. Drop them onto a clip slot or the arrangement."),
-    (Category::Samples, "Samples", "WAV files from your sample folders. Drop them onto a drum lane in the Device View."),
+    (Category::Samples, "Samples", "WAV files from your sample folders. Drop them onto a drum lane in the Device Chain."),
 ];
 
 pub struct BrowserState {
@@ -156,7 +156,7 @@ impl App {
                     }
                 }
                 Category::Clips => {
-                    for kind in [InstrumentKind::Drums, InstrumentKind::Bass, InstrumentKind::Synth, InstrumentKind::Simpler] {
+                    for kind in [InstrumentKind::Drums, InstrumentKind::Bass, InstrumentKind::Synth, InstrumentKind::Sampler] {
                         ui.label(RichText::new(format!("{} Clips", kind.name())).size(10.5).color(TEXT_DIM));
                         for p in PATTERNS.iter().filter(|p| p.kind == kind && matches(p.name)) {
                             let info = format!("{} bar(s), for {} tracks. Drop onto a clip slot or the arrangement.", p.bars, kind.name());
@@ -185,7 +185,7 @@ impl App {
                     for path in self.browser.samples.clone() {
                         let name = path.file_name().map(|f| f.to_string_lossy().to_string()).unwrap_or_default();
                         if matches(&name) {
-                            let info = format!("{}\n\nDrag into a clip slot or the arrangement of an audio track (or the empty area to create one), onto a Simpler, or onto a drum lane. Double-click loads it into the selected track.", path.display());
+                            let info = format!("{}\n\nDrag into a clip slot or the arrangement of an audio track (or the empty area to create one), onto a Sampler, or onto a drum lane. Double-click loads it into the selected track.", path.display());
                             self.browser_item(ui, &name, Payload::Sample(path), &info);
                         }
                     }

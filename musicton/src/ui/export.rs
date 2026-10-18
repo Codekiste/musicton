@@ -63,7 +63,7 @@ impl App {
                     ui.end_row();
                     ui.label("Source");
                     ui.horizontal(|ui| {
-                        ui.radio_value(&mut d.arrangement, true, "Arrangement");
+                        ui.radio_value(&mut d.arrangement, true, "Timeline");
                         ui.radio_value(&mut d.arrangement, false, "Scene");
                     });
                     ui.end_row();

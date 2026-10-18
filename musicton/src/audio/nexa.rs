@@ -1,4 +1,4 @@
-//! Nexa: a Nexus-style ROMpler. Sounds come from a built-in preset "ROM" of layered synth
+//! Nexa: a preset ROMpler. Sounds come from a built-in preset "ROM" of layered synth
 //! voices; the user picks a preset and shapes it with macros, arpeggiator, trancegate and FX.
 
 use super::dsp::*;

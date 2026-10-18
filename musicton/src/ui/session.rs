@@ -1,4 +1,4 @@
-//! Session View: clip grid, scene launcher and mixer.
+//! Launcher: clip grid, scene launcher and mixer.
 
 use super::theme::*;
 use super::widgets;
@@ -232,7 +232,7 @@ impl App {
     }
 
     fn add_track_menu_items(&mut self, ui: &mut egui::Ui) {
-        for (label, preset) in [("Add Drum Track", "909 Punch"), ("Add Bass Track", "TB Acid"), ("Add Synth Track", "Dub Stab"), ("Add Sampler Track", "Simpler")] {
+        for (label, preset) in [("Add Drum Track", "909 Punch"), ("Add Bass Track", "TB Acid"), ("Add Synth Track", "Dub Stab"), ("Add Sampler Track", "Sampler")] {
             if ui.button(label).clicked() {
                 self.add_track_from_preset(preset, None);
                 ui.close_menu();
@@ -528,7 +528,7 @@ impl App {
             if clip.is_some() {
                 self.info = Some((
                     "Clip".into(),
-                    "Click the triangle to launch (quantized to the global quantization). Click the clip to edit it below, drag to move it (Ctrl: copy), drag into the Arrangement to place it on the timeline. Right-click for options.".into(),
+                    "Click the triangle to launch (quantized to the global quantization). Click the clip to edit it below, drag to move it (Ctrl: copy), drag into the Timeline to place it on the timeline. Right-click for options.".into(),
                 ));
             } else {
                 self.info = Some((
@@ -592,7 +592,7 @@ impl App {
                 ui.close_menu();
             }
             ui.separator();
-            if ui.button("Copy Scenes to Arrangement").clicked() {
+            if ui.button("Copy Scenes to Timeline").clicked() {
                 self.scenes_to_arrangement();
                 ui.close_menu();
             }
@@ -613,7 +613,7 @@ impl App {
         // Skip empty scenes by giving them zero length.
         crate::presets::scenes_to_arrangement(&mut self.project, &bars, end_bar);
         self.touch();
-        self.toast("Scenes copied to the Arrangement");
+        self.toast("Scenes copied to the Timeline");
     }
 
     fn session_stop_row(&mut self, ui: &mut egui::Ui, rect: Rect) {
@@ -638,7 +638,7 @@ impl App {
             self.send(Cmd::StopAll);
         }
         resp.context_menu(|ui| self.map_menu(ui, MapTarget::StopAll, None));
-        self.hint(&resp, "Stop All Clips", "Stops every playing Session clip.");
+        self.hint(&resp, "Stop All Clips", "Stops every playing Launcher clip.");
     }
 
     fn session_mixer(&mut self, ui: &mut egui::Ui, rect: Rect) {

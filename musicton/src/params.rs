@@ -897,7 +897,7 @@ pub static TENSION_PARAMS: LazyLock<Vec<ParamDef>> = LazyLock::new(|| {
 });
 
 // ---------------------------------------------------------------------------------------------
-// B-303 (TB-303 style bassline) and Nexa (Nexus-style ROMpler)
+// B-303 (acid bassline) and Nexa (preset ROMpler)
 
 pub mod b303 {
     pub use b303_core::p::*;

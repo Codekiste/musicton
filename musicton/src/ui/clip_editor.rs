@@ -1,4 +1,4 @@
-//! Clip View: clip properties, drum step sequencer and piano roll.
+//! Clip Editor: clip properties, drum step sequencer and piano roll.
 
 use super::theme::*;
 use super::widgets;
@@ -95,8 +95,8 @@ impl App {
         ui.horizontal(|ui| {
             ui.label(egui::RichText::new("Clip").strong());
             let where_ = match r {
-                ClipRef::Session { scene, .. } => format!("Session, scene {}", scene + 1),
-                ClipRef::Arr { .. } => "Arrangement".into(),
+                ClipRef::Session { scene, .. } => format!("Launcher, scene {}", scene + 1),
+                ClipRef::Arr { .. } => "Timeline".into(),
             };
             ui.label(egui::RichText::new(where_).size(10.0).color(TEXT_DIM));
         });
@@ -178,7 +178,7 @@ impl App {
                         }
                     }
                 });
-                self.hint(&resp.response, "Follow Action", "What happens after this clip has played for the given number of bars: launch the next/previous/first/last/a random clip in this track, play again, or stop. Build self-playing live sets.");
+                self.hint(&resp.response, "Next Action", "What happens after this clip has played for the given number of bars: launch the next/previous/first/last/a random clip in this track, play again, or stop. Build self-playing live sets.");
                 if let Some(f) = c.follow.as_mut() {
                     ui.add(egui::DragValue::new(&mut f.bars).range(1..=64).suffix(" bars"));
                     let mut pct = f.chance * 100.0;
@@ -363,7 +363,7 @@ impl App {
                     self.drum_lane = lane;
                     self.assign_sample(Some(track), lane, &path);
                 }
-                self.hint(&resp, DRUM_LANES[lane], "Drum lane. Click to audition and select it (its sound parameters show in the Device View). Drop a WAV sample here to replace the sound.");
+                self.hint(&resp, DRUM_LANES[lane], "Drum lane. Click to audition and select it (its sound parameters show in the Device Chain). Drop a WAV sample here to replace the sound.");
             }
             egui::ScrollArea::horizontal().drag_to_scroll(false).id_salt("steps_h").show(ui, |ui| {
                 let (gr, resp) = ui.allocate_exact_size(vec2(grid_w, row_h * lanes as f32), Sense::click_and_drag());

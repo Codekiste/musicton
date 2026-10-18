@@ -118,7 +118,7 @@ mod tests {
     #[test]
     fn all_instruments_play() {
         use crate::model::*;
-        // A short test sample for Simpler.
+        // A short test sample for Sampler.
         let wav = std::env::temp_dir().join("musicton_test_tone.wav");
         {
             let spec = hound::WavSpec { channels: 1, sample_rate: 44100, bits_per_sample: 16, sample_format: hound::SampleFormat::Int };
@@ -136,14 +136,14 @@ mod tests {
             let id = p.add_track("T", preset.kind, CLIP_COLORS[0]);
             let t = p.track_mut(id).unwrap();
             t.instrument = preset.build();
-            if preset.kind == InstrumentKind::Simpler {
+            if preset.kind == InstrumentKind::Sampler {
                 t.instrument.samples[0] = Some(wav_s.clone());
             }
             let mut clip = Clip::new("c", CLIP_COLORS[0], 1);
             for s in 0..4u32 {
                 let pitch = match preset.kind {
                     InstrumentKind::Drums => s as u8,
-                    InstrumentKind::Simpler => 36 + s as u8,
+                    InstrumentKind::Sampler => 36 + s as u8,
                     _ => 48 + s as u8 * 3,
                 };
                 clip.notes.push(Note { step: s * 4, len: 3, pitch, vel: 110, slide: false });

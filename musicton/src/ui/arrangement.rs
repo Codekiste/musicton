@@ -1,4 +1,4 @@
-//! Arrangement View: timeline with clips, loop brace and automation lanes.
+//! Timeline: timeline with clips, loop brace and automation lanes.
 
 use super::theme::*;
 use super::widgets;
@@ -210,7 +210,7 @@ impl App {
             });
         }
         if ids.is_empty() {
-            p.text(lanes.center(), Align2::CENTER_CENTER, "Drop an instrument from the browser into the Session View to create a track", FontId::proportional(13.0), TEXT_DIM);
+            p.text(lanes.center(), Align2::CENTER_CENTER, "Drop an instrument from the browser into the Launcher to create a track", FontId::proportional(13.0), TEXT_DIM);
         }
 
         // Ruler.
@@ -239,7 +239,7 @@ impl App {
                 if r.clicked() {
                     self.scenes_to_arrangement();
                 }
-                self.hint(&r, "Copy Scenes to Arrangement", "Appends all non-empty scenes one after another to the end of the arrangement (at least 8 bars each).");
+                self.hint(&r, "Copy Scenes to Timeline", "Appends all non-empty scenes one after another to the end of the arrangement (at least 8 bars each).");
             });
         });
 
@@ -355,7 +355,7 @@ impl App {
         ui.painter().text(r.left_top() + vec2(10.0, 5.0), Align2::LEFT_TOP, &name, FontId::proportional(12.0), TEXT);
         let follow = self.track_status(id).is_none_or(|s| s.follow_arr);
         if !follow {
-            ui.painter().text(r.left_top() + vec2(10.0, 21.0), Align2::LEFT_TOP, "playing Session", FontId::proportional(9.5), ACCENT);
+            ui.painter().text(r.left_top() + vec2(10.0, 21.0), Align2::LEFT_TOP, "playing Launcher", FontId::proportional(9.5), ACCENT);
         }
         let mut new_mute = mute;
         let mut new_solo = solo;
@@ -432,7 +432,7 @@ impl App {
                 self.touch();
             }
         }
-        self.hint(&bg, "Arrangement Lane", "Drag clips here from the Session View or the browser. Double-click to create an empty clip. Alt disables snapping.");
+        self.hint(&bg, "Timeline Lane", "Drag clips here from the Launcher or the browser. Double-click to create an empty clip. Alt disables snapping.");
 
         let p = ui.painter().with_clip_rect(lanes);
         let clips: Vec<ArrClip> = self.project.track(track).map(|t| t.arrangement.clone()).unwrap_or_default();
@@ -526,7 +526,7 @@ impl App {
                     ui.close_menu();
                 }
             });
-            self.hint(&resp, &ac.clip.name, "Arrangement clip. Drag to move (also to other tracks), drag the right edge to loop/shorten it, double-click to edit notes. Alt disables snapping.");
+            self.hint(&resp, &ac.clip.name, "Timeline clip. Drag to move (also to other tracks), drag the right edge to loop/shorten it, double-click to edit notes. Alt disables snapping.");
         }
 
         // Active drag for clips of this track.
@@ -573,7 +573,7 @@ impl App {
             }
         }
 
-        // Drops from Session View or browser.
+        // Drops from Launcher or browser.
         match self.drop_target(ui, lane_rect, |p| matches!(p, Payload::SessionClip { .. } | Payload::Pattern(_) | Payload::Sample(_))) {
             Some(Payload::Sample(path)) => {
                 let is_audio = self.project.track(track).is_some_and(|t| t.instrument.kind == InstrumentKind::Audio);
@@ -834,6 +834,6 @@ impl App {
                 }
             }
         }
-        self.hint(&lane_resp, "Automation Lane", "Click to add breakpoints; the parameter follows the red line during Arrangement playback. Choose the parameter on the left.");
+        self.hint(&lane_resp, "Automation Lane", "Click to add breakpoints; the parameter follows the red line during Timeline playback. Choose the parameter on the left.");
     }
 }
