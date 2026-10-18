@@ -243,6 +243,10 @@ impl App {
             ui.close_menu();
             self.file_save(true);
         }
+        if ui.button("Versions...").clicked() {
+            self.versions.open = true;
+            ui.close_menu();
+        }
         ui.separator();
         if ui.button("Export Audio/Video...   (Ctrl+E)").clicked() {
             self.export = Some(export::ExportDialog::new(&self.project));

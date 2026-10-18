@@ -140,7 +140,7 @@ impl b303_gui::Host for PluginHost<'_> {
 impl Plugin for B303Plugin {
     const NAME: &'static str = "B-303";
     const VENDOR: &'static str = "Musicton";
-    const URL: &'static str = "https://github.com/AckermannMedia/musicton";
+    const URL: &'static str = "https://github.com/Codekiste/musicton";
     const EMAIL: &'static str = "";
     const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 

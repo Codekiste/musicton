@@ -61,6 +61,26 @@ impl App {
             }
             "transform_clip" => self.cmd_transform(a),
             "add_chord_to_clip" => self.cmd_clip_chord(a),
+            "versions" => self.cmd_versions(a),
+            "audio_to_midi" => {
+                let r = match self.clip_ref(a) {
+                    Ok(r) => r,
+                    Err(e) => return Some(Err(e)),
+                };
+                let mode = match s(a, "mode").unwrap_or("melody") {
+                    "drums" => crate::audio::analysis::MidiMode::Drums,
+                    "harmony" | "chords" => crate::audio::analysis::MidiMode::Harmony,
+                    _ => crate::audio::analysis::MidiMode::Melody,
+                };
+                self.audio_to_midi(r, mode).map(|(t, n)| json!({ "new_track_index": self.project.track_index(t), "notes": n }))
+            }
+            "split_stems" => {
+                let r = match self.clip_ref(a) {
+                    Ok(r) => r,
+                    Err(e) => return Some(Err(e)),
+                };
+                self.split_stems(r).map(|ids| json!({ "stem_tracks": ids.iter().filter_map(|t| self.project.track_index(*t)).collect::<Vec<_>>() }))
+            }
             _ => return None,
         };
         if r.is_ok() {
@@ -271,6 +291,27 @@ impl App {
             c.notes.push(Note { step, len, pitch: *p, vel, slide: false, skip: 0 });
         }
         Ok(json!({ "added": notes.iter().map(|p| note_name(*p)).collect::<Vec<_>>() }))
+    }
+
+    fn cmd_versions(&mut self, a: &Value) -> R {
+        use crate::versions;
+        let dir = versions::versions_dir(&self.project.name);
+        match s(a, "action").ok_or("missing 'action' (save, list, compare, restore)")? {
+            "save" => {
+                let v = self.save_version(s(a, "message").unwrap_or("Snapshot"))?;
+                Ok(json!({ "id": v.id, "summary": v.summary }))
+            }
+            "list" => Ok(json!(versions::list_versions(&dir).iter().map(|v| json!({"id": v.id, "time": versions::format_time(v.time), "message": v.message, "summary": v.summary})).collect::<Vec<_>>())),
+            "compare" => {
+                let old = versions::load_version(&dir, s(a, "id").ok_or("missing 'id'")?)?;
+                Ok(json!({ "changes_since": versions::diff(&old, &self.project) }))
+            }
+            "restore" => {
+                self.restore_version(s(a, "id").ok_or("missing 'id'")?)?;
+                Ok(json!("restored (previous state saved as 'Before restore')"))
+            }
+            other => Err(format!("unknown action '{other}'")),
+        }
     }
 
     fn cmd_arranger(&mut self, a: &Value) -> R {

@@ -1,5 +1,6 @@
 //! Application shell: layout, selection, undo, keyboard, files, live playing and recording.
 
+mod analysis_ui;
 mod arrangement;
 mod arranger;
 mod browser;
@@ -19,6 +20,7 @@ mod session;
 mod synth_ui;
 pub mod theme;
 mod transport;
+mod versions_ui;
 mod widgets;
 
 use crate::audio::engine::{Cmd, Status};
@@ -136,6 +138,7 @@ pub struct App {
     sel_device: Option<u64>,
     rack: rack_ui::RackUiState,
     chord_pads: composition_ui::ChordPadState,
+    versions: versions_ui::VersionsState,
     drag: Option<Payload>,
     info: Option<(String, String)>,
     kb_octave: i32,
@@ -238,6 +241,7 @@ impl App {
             sel_device: None,
             rack: Default::default(),
             chord_pads: Default::default(),
+            versions: Default::default(),
             drag: None,
             info: None,
             kb_octave: 4,
@@ -920,6 +924,7 @@ impl App {
             Ok(()) => {
                 self.toast(format!("Saved {}", path.display()));
                 self.file = Some(path);
+                let _ = self.save_version("Saved");
             }
             Err(e) => self.toast(format!("Save failed: {e}")),
         }
@@ -1469,6 +1474,7 @@ impl eframe::App for App {
         self.plugin_windows(ctx);
         self.chord_pads_window(ctx);
         self.rules_window(ctx);
+        self.versions_window(ctx);
         self.plugin_overlay_ui(ctx);
         self.update_arr_record();
         self.update_audio_record();

@@ -137,3 +137,28 @@ fn strum_spreads_chord() {
     let strummed = early(p2);
     assert!(strummed < base * 0.75 && strummed > 0.001, "strum did not delay the later notes: {base} vs {strummed}");
 }
+
+#[test]
+fn versions_save_list_diff_restore() {
+    use crate::versions;
+    let dir = std::env::temp_dir().join(format!("musicton_versions_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let (mut p, _) = pad_project(vec![note(0, 4, 60)]);
+    let v1 = versions::save_version(&dir, &p, "first").unwrap();
+    p.bpm = 140.0;
+    p.add_track("Bass", InstrumentKind::Voltage, CLIP_COLORS[2]);
+    let v2 = versions::save_version(&dir, &p, "faster").unwrap();
+    let list = versions::list_versions(&dir);
+    assert_eq!(list.iter().map(|v| v.message.as_str()).collect::<Vec<_>>(), vec!["faster", "first"]);
+    assert_ne!(v1.id, v2.id);
+    let old = versions::load_version(&dir, &v1.id).unwrap();
+    let d = versions::diff(&old, &p);
+    assert!(d.iter().any(|l| l.contains("Tempo")), "{d:?}");
+    assert!(d.iter().any(|l| l.contains("+ Track \"Bass\"")), "{d:?}");
+    assert_eq!(old.bpm, p.bpm - (p.bpm - old.bpm));
+    versions::prune(&dir, 1);
+    assert_eq!(versions::list_versions(&dir).len(), 1);
+    assert_eq!(versions::format_time(0), "1970-01-01 00:00 UTC");
+    assert_eq!(versions::format_time(1_792_324_800), "2026-10-18 12:00 UTC");
+    let _ = std::fs::remove_dir_all(&dir);
+}

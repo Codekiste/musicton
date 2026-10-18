@@ -342,6 +342,31 @@ impl App {
                 }
             }
         });
+        ui.horizontal(|ui| {
+            ui.label("Convert");
+            for (label, mode, tip) in [
+                ("Drums to MIDI", crate::audio::analysis::MidiMode::Drums, "Detects kicks, snares and hi-hats and writes them into a new drum track."),
+                ("Melody to MIDI", crate::audio::analysis::MidiMode::Melody, "Tracks the pitch of a monophonic line (voice, bass, lead) and writes the notes into a new synth track."),
+                ("Harmony to MIDI", crate::audio::analysis::MidiMode::Harmony, "Finds the strongest notes per beat and writes them as chords into a new pad track."),
+            ] {
+                let b = widgets::button(ui, label, false);
+                if b.clicked() {
+                    match self.audio_to_midi(r, mode) {
+                        Ok((_, n)) => self.toast(format!("{label}: {n} notes")),
+                        Err(e) => self.toast(format!("{label}: {e}")),
+                    }
+                }
+                self.hint(&b, label, tip);
+            }
+            let b = widgets::button(ui, "Split Stems", false);
+            if b.clicked() {
+                match self.split_stems(r) {
+                    Ok(ids) => self.toast(format!("Split into {} stem tracks (original muted)", ids.len())),
+                    Err(e) => self.toast(format!("Split failed: {e}")),
+                }
+            }
+            self.hint(&b, "Split Stems", "Separates the clip into Drums, Bass, Lead (centre melody / vocals) and Other on four new audio tracks. Pure signal processing: great for remixing and sampling, not perfectly clean.");
+        });
         let avail = ui.available_size();
         let (rect, resp) = ui.allocate_exact_size(vec2(avail.x.max(200.0), (avail.y - 4.0).max(60.0)), Sense::click());
         let p = ui.painter_at(rect);

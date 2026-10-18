@@ -10,6 +10,7 @@ pub mod effects4;
 pub mod instruments3;
 pub mod beatpads;
 pub mod samplers;
+pub mod analysis;
 pub mod engine;
 pub mod input;
 pub mod instruments;

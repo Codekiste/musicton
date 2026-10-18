@@ -7,7 +7,7 @@ default-members = ["musicton"]
 version = "0.1.0"
 edition = "2021"
 license = "GPL-3.0-or-later"
-repository = "https://github.com/AckermannMedia/musicton"
+repository = "https://github.com/Codekiste/musicton"
 
 [workspace.dependencies]
 egui = "0.31"
