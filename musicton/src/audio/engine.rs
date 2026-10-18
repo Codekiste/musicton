@@ -1066,7 +1066,7 @@ impl Engine {
         let chans = self.tracks.iter().map(|t| &t.ch).chain(self.returns.iter()).chain(std::iter::once(&self.master));
         for ch in chans {
             for d in &ch.devices {
-                if matches!(d.kind, DeviceKind::Compressor | DeviceKind::Limiter | DeviceKind::Sidechain) {
+                if matches!(d.kind, DeviceKind::Compressor | DeviceKind::Limiter | DeviceKind::Sidechain | DeviceKind::Gate | DeviceKind::BusCompressor | DeviceKind::Maximizer | DeviceKind::TruePeakLimiter) {
                     self.reductions.push((d.id, d.fx.reduction()));
                 }
             }

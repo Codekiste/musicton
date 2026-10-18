@@ -527,6 +527,7 @@ impl App {
                                 });
                             }
                         });
+                        self.meter_display(ui, &d);
                     }
                 }
                 if let Some(gr) = reduction {
@@ -797,6 +798,46 @@ impl App {
         let defs = d.kind.defs();
         let r = widgets::param(ui, ("spec", d.id), &mut d.params[0], &defs[0], KNOB);
         self.param_hint(&r, &defs[0], "How slowly the display falls back.");
+    }
+
+    /// Read-outs for devices that publish measurements (loudness, correlation).
+    fn meter_display(&mut self, ui: &mut egui::Ui, d: &Device) {
+        let data = self.status.displays.iter().find(|(id, _)| *id == d.id).map(|(_, v)| v.clone()).unwrap_or_default();
+        match d.kind {
+            DeviceKind::TruePeakLimiter if data.len() >= 6 => {
+                let (rect, resp) = ui.allocate_exact_size(vec2(150.0, 150.0), Sense::hover());
+                let p = ui.painter_at(rect);
+                p.rect_filled(rect, 2.0, KNOB_BG);
+                let fmt = |v: f32| if v <= -69.0 { "--".to_string() } else { format!("{v:.1}") };
+                let rows = [
+                    ("Momentary", fmt(data[0]), "LUFS"),
+                    ("Short-term", fmt(data[1]), "LUFS"),
+                    ("Integrated", fmt(data[2]), "LUFS"),
+                    ("True Peak", fmt(data[3]), "dBTP"),
+                    ("Input (S)", fmt(data[4]), "LUFS"),
+                ];
+                for (k, (name, v, unit)) in rows.iter().enumerate() {
+                    let y = rect.top() + 14.0 + k as f32 * 26.0;
+                    p.text(egui::pos2(rect.left() + 8.0, y), egui::Align2::LEFT_CENTER, *name, egui::FontId::proportional(10.0), TEXT_DIM);
+                    let big = k == 2;
+                    let col = if k == 3 && data[3] > -1.0 { REC } else if big { ACCENT } else { TEXT };
+                    p.text(egui::pos2(rect.right() - 36.0, y), egui::Align2::RIGHT_CENTER, v, egui::FontId::monospace(if big { 15.0 } else { 12.0 }), col);
+                    p.text(egui::pos2(rect.right() - 6.0, y), egui::Align2::RIGHT_CENTER, *unit, egui::FontId::proportional(9.0), TEXT_DIM);
+                }
+                self.hint(&resp, "Loudness Meter", "Loudness after the limiter (K-weighted, gated): momentary 400 ms, short-term 3 s, integrated since start or the last reset. Streaming platforms usually normalize to about -14 LUFS; keep true peak below -1 dBTP.");
+            }
+            DeviceKind::StereoImager if !data.is_empty() => {
+                let (rect, resp) = ui.allocate_exact_size(vec2(120.0, 40.0), Sense::hover());
+                let p = ui.painter_at(rect);
+                p.rect_filled(rect, 2.0, KNOB_BG);
+                let x = rect.center().x + data[0].clamp(-1.0, 1.0) * (rect.width() / 2.0 - 6.0);
+                p.line_segment([egui::pos2(rect.left() + 6.0, rect.bottom() - 10.0), egui::pos2(rect.right() - 6.0, rect.bottom() - 10.0)], egui::Stroke::new(1.0_f32, TEXT_DIM));
+                p.circle_filled(egui::pos2(x, rect.bottom() - 10.0), 4.0, if data[0] < 0.0 { REC } else { PLAY });
+                p.text(egui::pos2(rect.center().x, rect.top() + 9.0), egui::Align2::CENTER_CENTER, format!("Correlation {:+.2}", data[0]), egui::FontId::proportional(10.0), TEXT);
+                self.hint(&resp, "Correlation", "+1 = mono, 0 = very wide, below 0 = phase problems (parts cancel in mono).");
+            }
+            _ => {}
+        }
     }
 
     fn tuner_ui(&mut self, ui: &mut egui::Ui, d: &mut Device) {

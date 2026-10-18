@@ -131,18 +131,25 @@ pub enum DeviceKind {
     Vocoder,
     ChannelEq,
     Rack,
+    BeatMangler,
+    HeatStack,
+    HybridReverb,
+    TransientShaper,
+    Maximizer,
+    TruePeakLimiter,
+    StereoImager,
 }
 
 /// Browser folders for audio effect categories.
 pub const DEVICE_CATEGORIES: &[(&str, &[DeviceKind])] = &[
-    ("Delay & Loop", &[DeviceKind::Stutter, DeviceKind::Echo, DeviceKind::TripleDelay, DeviceKind::GrainDelay, DeviceKind::PingPong, DeviceKind::StereoDelay]),
-    ("Distortion", &[DeviceKind::TubeDrive, DeviceKind::Degrader, DeviceKind::Overdrive, DeviceKind::Stompbox, DeviceKind::Bitcrusher, DeviceKind::Saturator, DeviceKind::Vinyl]),
-    ("Drums", &[DeviceKind::DrumShaper]),
-    ("Dynamics", &[DeviceKind::Compressor, DeviceKind::Gate, DeviceKind::BusCompressor, DeviceKind::Limiter, DeviceKind::Multiband, DeviceKind::Sidechain]),
+    ("Delay & Loop", &[DeviceKind::BeatMangler, DeviceKind::Stutter, DeviceKind::Echo, DeviceKind::TripleDelay, DeviceKind::GrainDelay, DeviceKind::PingPong, DeviceKind::StereoDelay]),
+    ("Distortion", &[DeviceKind::TubeDrive, DeviceKind::Degrader, DeviceKind::Overdrive, DeviceKind::Stompbox, DeviceKind::Bitcrusher, DeviceKind::Saturator, DeviceKind::HeatStack, DeviceKind::Vinyl]),
+    ("Drums", &[DeviceKind::DrumShaper, DeviceKind::TransientShaper]),
+    ("Dynamics", &[DeviceKind::Compressor, DeviceKind::Gate, DeviceKind::BusCompressor, DeviceKind::Limiter, DeviceKind::Multiband, DeviceKind::Sidechain, DeviceKind::Maximizer, DeviceKind::TruePeakLimiter]),
     ("EQ & Filters", &[DeviceKind::FilterSweep, DeviceKind::ChannelEq, DeviceKind::DjEq, DeviceKind::Eq8]),
     ("Modulation", &[DeviceKind::PanLfo, DeviceKind::Chorus, DeviceKind::Flanger, DeviceKind::FreqShifter, DeviceKind::Phaser]),
-    ("Reverb & Resonance", &[DeviceKind::BodyResonator, DeviceKind::ChordResonator, DeviceKind::Reverb, DeviceKind::Vocoder]),
-    ("Utilities", &[DeviceKind::Analyzer, DeviceKind::Tuner, DeviceKind::Utility, DeviceKind::Rack]),
+    ("Reverb & Resonance", &[DeviceKind::BodyResonator, DeviceKind::ChordResonator, DeviceKind::Reverb, DeviceKind::HybridReverb, DeviceKind::Vocoder]),
+    ("Utilities", &[DeviceKind::Analyzer, DeviceKind::Tuner, DeviceKind::Utility, DeviceKind::StereoImager, DeviceKind::Rack]),
 ];
 
 impl DeviceKind {
@@ -192,6 +199,13 @@ impl DeviceKind {
             Self::Vocoder => "Vocoder",
             Self::ChannelEq => "Channel EQ",
             Self::Rack => "Rack",
+            Self::BeatMangler => "Beat Mangler",
+            Self::HeatStack => "Heat Stack",
+            Self::HybridReverb => "Hybrid Reverb",
+            Self::TransientShaper => "Transient Shaper",
+            Self::Maximizer => "Maximizer",
+            Self::TruePeakLimiter => "True Peak Limiter",
+            Self::StereoImager => "Stereo Imager",
         }
     }
     pub fn info(self) -> &'static str {
@@ -232,6 +246,13 @@ impl DeviceKind {
             Self::Tuner => "Shows the pitch of the incoming audio.",
             Self::Vocoder => "Imposes the spectrum of the track onto an internal saw, pulse or noise carrier - robot voices and talking synths.",
             Self::ChannelEq => "Simple, musical channel-strip EQ with low, sweepable mid and high bands.",
+            Self::BeatMangler => "Tempo-synced performance effect: 16-step patterns of gates, stutters, loops, reverse, half-speed and tape stops. Only acts while the transport runs.",
+            Self::HeatStack => "Three saturation stages in series (tube, tape, fuzz, fold, rectify, crush) with low cut, tone filter and bias, 2x oversampled.",
+            Self::HybridReverb => "Convolution early reflections from five room characters plus a modulated feedback-delay tail, with octave-up shimmer and pre-delay.",
+            Self::TransientShaper => "Boosts or softens the attack and the sustain of sounds independently of their level - punchier drums or tighter tails.",
+            Self::Maximizer => "Loudness maximizer: input gain into a transparent lookahead limiter with optional warm pre-saturation.",
+            Self::TruePeakLimiter => "Mastering limiter with 4x oversampled true-peak detection and a loudness meter (momentary, short-term, integrated LUFS, true peak).",
+            Self::StereoImager => "Three-band stereo width (mono bass, wide highs) with adjustable crossovers and a correlation meter.",
             Self::Rack => "Container with parallel chains: each chain has its own devices, volume and pan; the outputs are summed (parallel compression, layered effects, dry/wet splits).",
         }
     }
@@ -274,6 +295,13 @@ impl DeviceKind {
             Self::Vocoder => &params::VOCODER_PARAMS,
             Self::ChannelEq => &params::CHANNELEQ_PARAMS,
             Self::Rack => &params::RACK_PARAMS,
+            Self::BeatMangler => &params::MANGLER_PARAMS,
+            Self::HeatStack => &params::HEAT_PARAMS,
+            Self::HybridReverb => &params::HYBRID_VERB_PARAMS,
+            Self::TransientShaper => &params::TRANSIENT_PARAMS,
+            Self::Maximizer => &params::MAXIMIZER_PARAMS,
+            Self::TruePeakLimiter => &params::TP_LIMITER_PARAMS,
+            Self::StereoImager => &params::IMAGER_PARAMS,
         }
     }
 }

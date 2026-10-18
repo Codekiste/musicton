@@ -5,6 +5,7 @@ pub mod b303;
 pub mod dsp;
 pub mod effects;
 pub mod effects2;
+pub mod effects3;
 pub mod engine;
 pub mod input;
 pub mod instruments;

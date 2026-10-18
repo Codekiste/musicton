@@ -52,13 +52,22 @@ Audio läuft über ALSA bzw. PipeWire/PulseAudio (Standardgerät). Ein angeschlo
 
 **Instrumente:** B-303 Bassline (Acid-Bassline: Diodenkaskaden-artiges Filter, Accent-Sweep, Slide, interner Sequencer mit 8 Patterns, Shuffle, Scale, 5 Play-Modes, Drive- und Delay-Sektion, eigenes Plugin-Fenster) · Nexa (Preset-Rompler: 53 Presets in 10 Kategorien, bis zu 4 Layer, Macros, Arpeggiator, Trancegate, Effekte) · Drum Machine (10 Lanes, synthetisiert oder mit WAV pro Lane) · Acid Bass (mit Accent/Slide) · Poly Synth · Sampler (Classic/One-Shot/Slice, Tempo-Sync) · FM4 (4-Operator-FM, 8 Algorithmen) · Morph (Wavetable-Synth, 5 Tabellen, LFO/Env auf Position) · String Model (Karplus-Strong-Saite)
 
-**Audio-Effekte (36):** Filter Sweep, Pan LFO, Stutter, Channel EQ, Chorus, Compressor, Body Resonator, Drum Shaper, Tube Drive, Echo, Parametric EQ (mit Kurve), DJ EQ, Degrader, Triple Delay, Flanger, Frequency Shifter, Gate, Bus Compressor, Grain Delay, Limiter, Multiband Compressor (Upward- und Downward-Kompression), Overdrive, Pedal, Phaser, Ping Pong Delay, Bitcrusher, Chord Resonator, Reverb, Saturator, Sidechain, Stereo Delay, Spectrum, Tuner, Utility, Vinyl, Vocoder
+**Audio-Effekte (43):** Beat Mangler, Heat Stack, Hybrid Reverb, Transient Shaper, Maximizer, True Peak Limiter, Stereo Imager, Filter Sweep, Pan LFO, Stutter, Channel EQ, Chorus, Compressor, Body Resonator, Drum Shaper, Tube Drive, Echo, Parametric EQ (mit Kurve), DJ EQ, Degrader, Triple Delay, Flanger, Frequency Shifter, Gate, Bus Compressor, Grain Delay, Limiter, Multiband Compressor (Upward- und Downward-Kompression), Overdrive, Pedal, Phaser, Ping Pong Delay, Bitcrusher, Chord Resonator, Reverb, Saturator, Sidechain, Stereo Delay, Spectrum, Tuner, Utility, Vinyl, Vocoder
 
 **MIDI-Effekte:** Arpeggiator, Chord, Note Length, Pitch, Random, Scale, Velocity
 
 **Audio:** Audiospuren mit Warp-Modi Beats (Time-Stretch), Re-Pitch und Off, automatische Tempo-Erkennung von Loops, Audio-Aufnahme vom Eingang (Spur scharf schalten ● + Record)
 
 **Plugin-Fenster:** B-303 und Nexa erscheinen in der Device-Kette als kompakter Plugin-Device mit den wichtigsten Parametern. Der 🔧-Button (oder Doppelklick auf den Titel) öffnet den Editor in einem eigenen Fenster, Ctrl+Alt+P blendet alle Plugin-Fenster ein/aus. Neue B-303/Nexa-Spuren öffnen ihr Fenster automatisch.
+
+**Mastering und Performance-Effekte:**
+- Beat Mangler: taktsynchrone 16-Step-Muster aus Gate, Stutter, Loop, Reverse, Half-Speed und Tape-Stop
+- Heat Stack: drei Sättigungsstufen hintereinander (Tube, Tape, Fuzz, Fold, Rectify, Crush), 2-fach Oversampling
+- Hybrid Reverb: Faltungshall für die Erstreflexionen aus fünf Raumcharakteren, dazu eine modulierte Hallfahne und Oktav-Shimmer
+- Transient Shaper: Attack und Sustain getrennt formen, mit Lookahead
+- Maximizer: Lautheit per Lookahead-Limiter, optional mit warmer Vorsättigung
+- True Peak Limiter: 4-fach überabgetastete True-Peak-Erkennung, Loudness-Meter mit Momentary, Short-term und Integrated LUFS sowie True Peak
+- Stereo Imager: Stereobreite in drei Bändern (Mono-Bass, breite Höhen), Korrelationsanzeige
 
 **Arrangement-Workflow:**
 - Arranger-Spur: Song-Abschnitte (Intro, Build, Drop …) über der Timeline. Verschieben, Duplizieren und Löschen nimmt Clips und Automation mit.
@@ -110,12 +119,12 @@ Netzwerk-Tempo-Sync, Audio-to-MIDI, Sampler-Multisampling, Clip-Hüllkurven und 
 
 Musicton öffnet beim Start einen lokalen Steuer-Port (`127.0.0.1:47800`, nur lokal erreichbar; abschalten mit `MUSICTON_NO_REMOTE=1`, anderer Port mit `MUSICTON_PORT`). Der MCP-Server `musicton-mcp` übersetzt MCP-Tool-Aufrufe darauf. Claude Code findet ihn über die `.mcp.json` im Projektordner.
 
-Die 52 Tools decken ab:
+Die 54 Tools decken ab:
 - **Zustand:** Projekt, Spuren, Clips mit Noten, Devices mit allen Parametern, Meter
 - **Transport und Launch:** Abspielen, Stoppen, Clips und Szenen starten
 - **Bearbeiten:** Spuren, Clips, Noten, Devices, Parameter, Automation, Timeline
 - **Arrangement:** Abschnitte, Marker, Section Chain, Playlist, Routing, Sidechain, Racks, Modulatoren
-- **Messen:** Offline-Rendern mit Pegelanalyse (Peak, RMS, Clipping, Bass/Mitten/Höhen-Verteilung)
+- **Messen:** Offline-Rendern mit Pegelanalyse (Peak, RMS, Clipping, Bass/Mitten/Höhen-Verteilung), Live-Loudness (LUFS, True Peak) und Stereo-Korrelation
 - **Oberfläche:** Screenshots und Maus-/Tastatur-Eingaben
 
 `musicton_launch_app` startet die App, falls sie nicht läuft (mit `--x11`). Hintergrund: Unter Wayland pausiert KDE verdeckte oder minimierte Fenster, dann kann die App keine Befehle abarbeiten. Mit `musicton --x11` (XWayland) läuft sie immer weiter.

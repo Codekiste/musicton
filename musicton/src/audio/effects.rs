@@ -2,6 +2,7 @@
 
 use super::dsp::*;
 use super::effects2 as e2;
+use super::effects3 as e3;
 use crate::model::DeviceKind;
 use crate::params::division_beats;
 
@@ -77,6 +78,13 @@ pub fn create(kind: DeviceKind, sr: f32) -> Box<dyn Effect> {
         DeviceKind::Vocoder => Box::new(e2::Vocoder::new(sr)),
         DeviceKind::ChannelEq => Box::new(e2::ChannelEq::default()),
         DeviceKind::Rack => Box::new(Passthrough),
+        DeviceKind::BeatMangler => Box::new(e3::Mangler::new(sr)),
+        DeviceKind::HeatStack => Box::new(e3::HeatStack::default()),
+        DeviceKind::HybridReverb => Box::new(e3::HybridVerb::new(sr)),
+        DeviceKind::TransientShaper => Box::new(e3::TransientShaper::new(sr)),
+        DeviceKind::Maximizer => Box::new(e3::Maximizer::new(sr)),
+        DeviceKind::TruePeakLimiter => Box::new(e3::TruePeakLimiter::new(sr)),
+        DeviceKind::StereoImager => Box::new(e3::Imager::default()),
     }
 }
 

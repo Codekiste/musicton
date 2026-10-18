@@ -45,12 +45,35 @@ impl App {
             "set_sidechain" => self.cmd_sidechain(a),
             "rack" => self.cmd_rack(a),
             "modulator" => self.cmd_modulator(a),
+            "get_device_meter" => return Some(self.cmd_meter(a)),
             _ => return None,
         };
         if r.is_ok() {
             self.touch();
         }
         Some(r)
+    }
+
+    /// Live measurements of a device (loudness meter, correlation, gain reduction).
+    fn cmd_meter(&mut self, a: &Value) -> R {
+        let id = u(a, "device_id").ok_or("missing 'device_id'")?;
+        let kind = self.project.device_mut(id).ok_or("no such device")?.kind;
+        let data = self.status.displays.iter().find(|(d, _)| *d == id).map(|(_, v)| v.clone()).unwrap_or_default();
+        let gr = self.status.reductions.iter().find(|(d, _)| *d == id).map(|(_, r)| *r);
+        let r1 = |v: f32| (v * 10.0).round() / 10.0;
+        let mut o = json!({ "device": kind.name(), "gain_reduction_db": gr.map(r1) });
+        match kind {
+            DeviceKind::TruePeakLimiter if data.len() >= 6 => {
+                o["momentary_lufs"] = json!(r1(data[0]));
+                o["short_term_lufs"] = json!(r1(data[1]));
+                o["integrated_lufs"] = json!(r1(data[2]));
+                o["true_peak_dbtp"] = json!(r1(data[3]));
+                o["input_short_term_lufs"] = json!(r1(data[4]));
+            }
+            DeviceKind::StereoImager if !data.is_empty() => o["correlation"] = json!((data[0] * 100.0).round() / 100.0),
+            _ => o["raw"] = json!(data.iter().take(16).collect::<Vec<_>>()),
+        }
+        Ok(o)
     }
 
     fn cmd_arranger(&mut self, a: &Value) -> R {

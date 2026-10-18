@@ -992,6 +992,84 @@ pub static NEXA_PARAMS: LazyLock<Vec<ParamDef>> = LazyLock::new(|| {
     ]
 });
 
+pub const MANGLER_PATTERN_NAMES: &[&str] = &["Gate 1/8", "Offbeat Gate", "Stutter End", "Tape Stop End", "Reverse Fill", "Half Time", "Glitch A", "Glitch B"];
+
+pub static MANGLER_PARAMS: LazyLock<Vec<ParamDef>> = LazyLock::new(|| {
+    vec![
+        ParamDef::options("Pattern", MANGLER_PATTERN_NAMES, 0),
+        ParamDef::options("Step", &["1/32", "1/16", "1/8"], 1),
+        ParamDef::new("Dry/Wet", 0.0, 1.0, 1.0, Unit::Pct),
+    ]
+});
+
+pub static HEAT_PARAMS: LazyLock<Vec<ParamDef>> = LazyLock::new(|| {
+    const T: &[&str] = &["Off", "Tube", "Tape", "Fuzz", "Fold", "Rectify", "Crush"];
+    vec![
+        ParamDef::new("Drive", 0.0, 36.0, 12.0, Unit::Db),
+        ParamDef::options("Stage 1", T, 1),
+        ParamDef::options("Stage 2", T, 2),
+        ParamDef::options("Stage 3", T, 0),
+        ParamDef::new("Bias", -0.5, 0.5, 0.0, Unit::None),
+        ParamDef::new("Low Cut", 20.0, 1000.0, 30.0, Unit::Hz).log(),
+        ParamDef::new("Tone", 1000.0, 20000.0, 12000.0, Unit::Hz).log(),
+        ParamDef::new("Dry/Wet", 0.0, 1.0, 1.0, Unit::Pct),
+        ParamDef::new("Output", -24.0, 12.0, 0.0, Unit::Db),
+    ]
+});
+
+pub static HYBRID_VERB_PARAMS: LazyLock<Vec<ParamDef>> = LazyLock::new(|| {
+    vec![
+        ParamDef::options("Character", &["Room", "Hall", "Plate", "Chamber", "Cathedral"], 1),
+        ParamDef::new("Size", 0.3, 2.0, 1.0, Unit::X),
+        ParamDef::new("Decay", 0.2, 20.0, 3.0, Unit::Sec).log(),
+        ParamDef::new("Damping", 1000.0, 18000.0, 7000.0, Unit::Hz).log(),
+        ParamDef::new("Pre-Delay", 0.0, 0.2, 0.02, Unit::Sec),
+        ParamDef::new("Early/Late", 0.0, 1.0, 0.6, Unit::Pct),
+        ParamDef::new("Shimmer", 0.0, 0.8, 0.0, Unit::Pct),
+        ParamDef::new("Dry/Wet", 0.0, 1.0, 0.3, Unit::Pct),
+    ]
+});
+
+pub static TRANSIENT_PARAMS: LazyLock<Vec<ParamDef>> = LazyLock::new(|| {
+    vec![
+        ParamDef::new("Attack", -1.0, 1.0, 0.0, Unit::Pct),
+        ParamDef::new("Sustain", -1.0, 1.0, 0.0, Unit::Pct),
+        ParamDef::new("Output", -24.0, 12.0, 0.0, Unit::Db),
+        ParamDef::new("Dry/Wet", 0.0, 1.0, 1.0, Unit::Pct),
+        ParamDef::new("Speed", 0.25, 4.0, 1.0, Unit::X).log(),
+    ]
+});
+
+pub static MAXIMIZER_PARAMS: LazyLock<Vec<ParamDef>> = LazyLock::new(|| {
+    vec![
+        ParamDef::new("Gain", 0.0, 24.0, 3.0, Unit::Db),
+        ParamDef::new("Ceiling", -12.0, 0.0, -0.3, Unit::Db),
+        ParamDef::new("Release", 0.005, 1.0, 0.08, Unit::Sec).log(),
+        ParamDef::new("Warmth", 0.0, 1.0, 0.0, Unit::Pct),
+    ]
+});
+
+pub static TP_LIMITER_PARAMS: LazyLock<Vec<ParamDef>> = LazyLock::new(|| {
+    vec![
+        ParamDef::new("Input", -12.0, 24.0, 0.0, Unit::Db),
+        ParamDef::new("Ceiling", -6.0, 0.0, -1.0, Unit::Db),
+        ParamDef::new("Release", 0.005, 1.0, 0.1, Unit::Sec).log(),
+        ParamDef::new("Lookahead", 1.0, 10.0, 3.0, Unit::Ms),
+        ParamDef::options("Reset Meter", &["-", "Reset"], 0),
+    ]
+});
+
+pub static IMAGER_PARAMS: LazyLock<Vec<ParamDef>> = LazyLock::new(|| {
+    vec![
+        ParamDef::new("Low Width", 0.0, 2.0, 0.0, Unit::X),
+        ParamDef::new("Mid Width", 0.0, 2.0, 1.0, Unit::X),
+        ParamDef::new("High Width", 0.0, 2.0, 1.3, Unit::X),
+        ParamDef::new("Low X", 60.0, 600.0, 150.0, Unit::Hz).log(),
+        ParamDef::new("High X", 1000.0, 12000.0, 4000.0, Unit::Hz).log(),
+        ParamDef::new("Output", -12.0, 12.0, 0.0, Unit::Db),
+    ]
+});
+
 pub static RACK_PARAMS: LazyLock<Vec<ParamDef>> = LazyLock::new(|| {
     vec![
         ParamDef::new("Dry/Wet", 0.0, 1.0, 1.0, Unit::Pct),
