@@ -496,7 +496,8 @@ impl Backend for ClapPlugin {
     }
 
     fn show_gui(&mut self, on: bool, sched: &mut Scheduler) -> bool {
-        if self.gui.is_null() {
+        // Editor windows are embedded into an X11 window; other systems are not supported yet.
+        if self.gui.is_null() || !cfg!(target_os = "linux") {
             return false;
         }
         unsafe {
@@ -522,7 +523,7 @@ impl Backend for ClapPlugin {
                 (g.destroy.unwrap())(self.plugin);
                 return false;
             };
-            let window = clap_window { api: CLAP_WINDOW_API_X11.as_ptr(), specific: clap_window_handle { x11: xid } };
+            let window = clap_window { api: CLAP_WINDOW_API_X11.as_ptr(), specific: clap_window_handle { x11: xid as std::ffi::c_ulong } };
             (g.set_parent.unwrap())(self.plugin, &window);
             (g.show.unwrap())(self.plugin);
             self.gui_open = true;
