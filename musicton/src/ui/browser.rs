@@ -16,9 +16,10 @@ pub enum Category {
     MidiEffects,
     Clips,
     Samples,
+    Plugins,
 }
 
-const CATEGORIES: [(Category, &str, &str); 7] = [
+const CATEGORIES: [(Category, &str, &str); 8] = [
     (Category::Sounds, "Sounds", "All instrument presets."),
     (Category::Drums, "Drums", "Drum machine kits and drum patterns."),
     (Category::Instruments, "Instruments", "The raw instruments: Drum Machine, Acid Bass and Poly Synth."),
@@ -26,6 +27,7 @@ const CATEGORIES: [(Category, &str, &str); 7] = [
     (Category::MidiEffects, "MIDI Effects", "Note processors that sit before the instrument: arpeggiator, chords, scales and more."),
     (Category::Clips, "Clips", "Ready-made MIDI patterns. Drop them onto a clip slot or the arrangement."),
     (Category::Samples, "Samples", "WAV files from your sample folders. Drop them onto a drum lane in the Device Chain."),
+    (Category::Plugins, "Plug-ins", "Installed VST3 and CLAP plug-ins. Each runs in its own sandbox process, so a crashing plug-in never takes Musicton down."),
 ];
 
 pub struct BrowserState {
@@ -93,6 +95,9 @@ impl App {
                 if cat == Category::Samples && !self.browser.scanned {
                     self.browser.rescan();
                 }
+                if cat == Category::Plugins && self.plugins_state.list.is_empty() && self.plugins_state.scan.is_none() {
+                    self.load_plugin_list();
+                }
             }
             self.hint(&r, name, info);
         }
@@ -130,6 +135,7 @@ impl App {
                         }
                     }
                 }
+                Category::Plugins => self.plugin_browser(ui, &matches),
                 Category::AudioEffects => {
                     for (folder, kinds) in crate::model::DEVICE_CATEGORIES {
                         let visible: Vec<DeviceKind> = kinds.iter().copied().filter(|k| matches(k.name())).collect();
@@ -194,7 +200,7 @@ impl App {
         });
     }
 
-    fn browser_item(&mut self, ui: &mut egui::Ui, name: &str, payload: Payload, info: &str) {
+    pub(super) fn browser_item(&mut self, ui: &mut egui::Ui, name: &str, payload: Payload, info: &str) {
         // A full-width row (not a Label) so dragging never turns into text selection.
         let (rect, r) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 18.0), Sense::click_and_drag());
         if r.hovered() || r.dragged() {
@@ -223,6 +229,7 @@ impl App {
                 self.add_track_from_preset(name, None);
             }
             Payload::Device(kind) => self.add_device(self.sel, kind, None),
+            Payload::Plugin(i) => self.add_plugin(i, Some(self.sel)),
             Payload::MidiFx(kind) => match self.selected_track() {
                 Some(t) => self.add_midi_fx(t, kind, None),
                 None => self.toast("Select a track for the MIDI effect"),

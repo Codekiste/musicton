@@ -417,7 +417,7 @@ impl App {
             self.detail = Detail::Devices;
         }
         resp.context_menu(|ui| self.track_menu(ui, id));
-        if let Some(p) = self.drop_target(ui, r, |p| matches!(p, Payload::Device(_) | Payload::MidiFx(_) | Payload::Instrument(_))) {
+        if let Some(p) = self.drop_target(ui, r, |p| matches!(p, Payload::Device(_) | Payload::MidiFx(_) | Payload::Instrument(_) | Payload::Plugin(_))) {
             self.drop_on_track(id, p);
         }
         self.hint(&resp, &name, "Track header. Click to select, right-click for options. Drop effects or instruments here.");

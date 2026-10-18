@@ -62,6 +62,19 @@ impl App {
             "transform_clip" => self.cmd_transform(a),
             "add_chord_to_clip" => self.cmd_clip_chord(a),
             "versions" => self.cmd_versions(a),
+            "plugins" => self.cmd_plugins(a),
+            "add_plugin" => self.cmd_add_plugin(a),
+            "set_plugin_param" => self.cmd_plugin_param(a),
+            "plugin_editor" => {
+                let key = match self.plugin_key(a) {
+                    Ok(k) => k,
+                    Err(e) => return Some(Err(e)),
+                };
+                match crate::audio::plugbridge::get_blocking(key) {
+                    Some(br) => br.show_gui(b(a, "open").unwrap_or(true)).map(|_| json!("ok")),
+                    None => Err("plug-in not running yet".into()),
+                }
+            }
             "import_video" => {
                 let Some(path) = s(a, "path") else { return Some(Err("missing 'path'".into())) };
                 let start = bar(a, "start_bar").unwrap_or(0);
@@ -337,6 +350,96 @@ impl App {
             }
             other => Err(format!("unknown action '{other}'")),
         }
+    }
+
+    fn cmd_plugins(&mut self, a: &Value) -> R {
+        use crate::audio::plugbridge;
+        if s(a, "action") == Some("rescan") || self.plugins_state.list.is_empty() {
+            self.plugins_state.list = if s(a, "action") == Some("rescan") { plugbridge::scan_all(&[]) } else { plugbridge::cached_plugins() };
+            if self.plugins_state.list.is_empty() {
+                self.plugins_state.list = plugbridge::scan_all(&[]);
+            }
+        }
+        let f = s(a, "filter").unwrap_or("").to_lowercase();
+        Ok(json!(self
+            .plugins_state
+            .list
+            .iter()
+            .filter(|d| f.is_empty() || d.name.to_lowercase().contains(&f) || d.vendor.to_lowercase().contains(&f))
+            .map(|d| json!({"name": d.name, "vendor": d.vendor, "format": d.format, "instrument": d.instrument, "id": d.id, "path": d.path}))
+            .collect::<Vec<_>>()))
+    }
+
+    fn cmd_add_plugin(&mut self, a: &Value) -> R {
+        if self.plugins_state.list.is_empty() {
+            self.cmd_plugins(&json!({}))?;
+        }
+        let name = s(a, "name").ok_or("missing 'name' (see musicton_plugins)")?.to_lowercase();
+        let format = s(a, "format").map(str::to_lowercase);
+        let d = self
+            .plugins_state
+            .list
+            .iter()
+            .find(|d| (d.name.to_lowercase() == name || d.id.to_lowercase() == name) && format.as_ref().is_none_or(|f| *f == d.format))
+            .or_else(|| self.plugins_state.list.iter().find(|d| d.name.to_lowercase().contains(&name) && format.as_ref().is_none_or(|f| *f == d.format)))
+            .cloned()
+            .ok_or(format!("no plug-in named '{name}'"))?;
+        let target = match a.get("channel").or(a.get("track")) {
+            Some(v) => {
+                let st = v.as_str().map(str::to_lowercase);
+                Some(match st.as_deref() {
+                    Some("master") => super::Sel::Master,
+                    Some("a") | Some("return a") => super::Sel::Return(0),
+                    Some("b") | Some("return b") => super::Sel::Return(1),
+                    _ => super::Sel::Track(self.resolve_track(Some(v))?),
+                })
+            }
+            None => None,
+        };
+        let key = self.add_plugin_desc(&d, target);
+        self.plugins_state_poke();
+        Ok(json!({ "name": d.name, "format": d.format, if d.instrument { "track_index" } else { "device_id" }: if d.instrument { json!(self.project.track_index(key)) } else { json!(key) } }))
+    }
+
+    fn plugin_key(&self, a: &Value) -> Result<u64, String> {
+        if let Some(id) = u(a, "device_id") {
+            return Ok(id);
+        }
+        let t = self.resolve_track(a.get("track"))?;
+        let tr = self.project.track(t).unwrap();
+        if tr.instrument.kind == InstrumentKind::Plugin {
+            return Ok(t);
+        }
+        tr.channel.devices.iter().find(|d| d.kind == DeviceKind::Plugin).map(|d| d.id).ok_or("no plug-in on that track".into())
+    }
+
+    fn cmd_plugin_param(&mut self, a: &Value) -> R {
+        let key = self.plugin_key(a)?;
+        // Wait briefly for a plug-in that is still loading so its parameters are known.
+        for _ in 0..50 {
+            self.sync_plugins_now();
+            let known = self.plugin_infos(key).is_some_and(|i| !i.is_empty());
+            if known {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
+        let infos = self.plugin_infos(key).ok_or("plug-in not found")?;
+        if a.get("param").is_none() {
+            return Ok(json!(infos.iter().take(300).map(|p| json!({"id": p.id, "name": p.name, "min": p.min, "max": p.max, "default": p.default})).collect::<Vec<_>>()));
+        }
+        let key_v = a.get("param").unwrap();
+        let p = match key_v {
+            Value::Number(n) => infos.iter().find(|p| Some(p.id as u64) == n.as_u64()),
+            Value::String(n) => infos.iter().find(|p| p.name.eq_ignore_ascii_case(n)).or_else(|| infos.iter().find(|p| p.name.to_lowercase().contains(&n.to_lowercase()))),
+            _ => None,
+        }
+        .cloned()
+        .ok_or("unknown parameter (call without 'param' to list them)")?;
+        let v = f(a, "value").ok_or("missing 'value'")? as f64;
+        let v = if b(a, "normalized") == Some(true) { p.min + v * (p.max - p.min) } else { v.clamp(p.min, p.max) };
+        self.plugin_set_param(key, p.id, v);
+        Ok(json!({ "param": p.name, "value": v }))
     }
 
     fn cmd_arranger(&mut self, a: &Value) -> R {

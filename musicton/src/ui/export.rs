@@ -18,8 +18,9 @@ pub struct ExportDialog {
 }
 
 impl ExportDialog {
-    pub fn new(p: &Project) -> Self {
-        Self { arrangement: p.arrangement_end() > 0, scene: 0, bars: 16, sample_rate: 44100, depth: BitDepth::Int16, normalize: false, stems: false, with_video: p.video.is_some() }
+    /// Defaults to the live sample rate (plug-ins run at that rate).
+    pub fn new(p: &Project, live_rate: u32) -> Self {
+        Self { arrangement: p.arrangement_end() > 0, scene: 0, bars: 16, sample_rate: if [44100, 48000, 88200, 96000].contains(&live_rate) { live_rate } else { 48000 }, depth: BitDepth::Int16, normalize: false, stems: false, with_video: p.video.is_some() }
     }
 }
 

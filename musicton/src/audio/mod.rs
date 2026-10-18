@@ -11,6 +11,7 @@ pub mod instruments3;
 pub mod beatpads;
 pub mod samplers;
 pub mod analysis;
+pub mod plugbridge;
 pub mod engine;
 pub mod input;
 pub mod instruments;
@@ -222,6 +223,7 @@ fn render_to_file(
     let tail = 3.0;
     let total = ((steps as f64 * step_secs + tail) * sr as f64) as usize;
     let music_end = (steps as f64 * step_secs * sr as f64) as usize;
+    let _plugins = plugbridge::OfflineGuard::new();
     let mut engine = Engine::new(sr as f32, Arc::new(project));
     match source {
         ExportSource::Arrangement => engine.handle(Cmd::Play),

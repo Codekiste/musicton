@@ -259,7 +259,7 @@ impl App {
         }
         ui.separator();
         if ui.button("Export Audio/Video...   (Ctrl+E)").clicked() {
-            self.export = Some(export::ExportDialog::new(&self.project));
+            self.export = Some(export::ExportDialog::new(&self.project, self.audio.sample_rate));
             ui.close_menu();
         }
         ui.separator();

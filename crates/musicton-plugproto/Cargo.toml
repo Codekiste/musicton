@@ -1,0 +1,9 @@
+[package]
+name = "musicton-plugproto"
+description = "Message protocol between Musicton and its sandboxed plug-in host process"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
