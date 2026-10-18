@@ -9,7 +9,7 @@ $ErrorActionPreference = "Stop"
 Set-Location (Join-Path $PSScriptRoot "..\..")
 
 if ($Product -eq "musicton") {
-    cargo build --release -p musicton
+    cargo build --release -p musicton -p musicton-plughost
 } else {
     cargo xtask bundle b303-plugin --release
 }

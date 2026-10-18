@@ -34,6 +34,7 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 [Files]
 Source: "..\..\target\release\musicton.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\..\target\release\musicton-mcp.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\..\target\release\musicton-plughost.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\..\LICENSE"; DestDir: "{app}"; DestName: "LICENSE.txt"
 
 [Icons]

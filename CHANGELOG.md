@@ -13,9 +13,11 @@ Erste öffentliche Vorabversion.
 - Launcher (Clip-Raster mit Szenen) und Timeline (Arrangement mit Automation), Mixer mit Sends, Returns und Crossfader, Gruppenspuren
 - Arranger-Spur, Section Chain, Marker, Pattern-Playlist, Clip Gain, Modulatoren, Racks mit parallelen Ketten, freies Routing und Sidechain von jeder Spur
 - 15 Instrumente, darunter B-303 Bassline, Nexa, Voltage, Matrix FM, Grain Cloud, Beat Pads, Multi Sampler und Slicer
-- 43 Audio-Effekte, darunter Beat Mangler, Heat Stack, Hybrid Reverb, Transient Shaper, Maximizer, True Peak Limiter mit LUFS-Meter und Stereo Imager
+- Audio-Effekte, darunter Beat Mangler, Heat Stack, Hybrid Reverb, Transient Shaper, Maximizer, True Peak Limiter mit LUFS-Meter und Stereo Imager
 - 8 MIDI-Effekte, Chord Track, Follow Chords, Chord Pads, Chord Stamps und Strum, Ghost Notes, Note Rules und Noten-Wahrscheinlichkeit
 - Audio-Aufnahme, Audiospuren mit Tempo-Warping, WAV-Export als Master oder Stems, Undo/Redo, Autosave
 - Eigene Sample-Library „Musicton Core“ (CC0)
-- Fernsteuerung per MCP
+- Plug-ins (VST3/CLAP) in eigener Sandbox (`musicton-plughost`), Projektversionen, Notenansicht mit MusicXML-Export, Audio zu MIDI, Stem-Splitter, Video-Spur mit MP4-Export
+- Pitch Fix und Space Panner (45 Audio-Effekte)
+- Fernsteuerung per MCP (70 Tools)
 - Installer für Linux (.deb, .tar.gz), macOS (.dmg, Universal) und Windows (Setup)

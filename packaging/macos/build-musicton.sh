@@ -4,13 +4,13 @@ set -euo pipefail
 version="$1"
 cd "$(dirname "$0")/../.."
 for t in aarch64-apple-darwin x86_64-apple-darwin; do
-    cargo build --release -p musicton --target "$t"
+    cargo build --release -p musicton -p musicton-plughost --target "$t"
 done
 mkdir -p dist
 
 app="target/stage/Musicton.app"
 rm -rf target/stage && mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
-for b in musicton musicton-mcp; do
+for b in musicton musicton-mcp musicton-plughost; do
     lipo -create -output "$app/Contents/MacOS/$b" \
         "target/aarch64-apple-darwin/release/$b" "target/x86_64-apple-darwin/release/$b"
 done
