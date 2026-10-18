@@ -23,6 +23,7 @@ parking_lot = "0.12"
 dirs = "5"
 png = "0.17"
 base64 = "0.22"
+musicton-plugproto = { path = "../crates/musicton-plugproto" }
 
 [[bin]]
 name = "musicton"

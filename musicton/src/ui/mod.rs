@@ -12,15 +12,18 @@ mod instruments_ui;
 mod mapping;
 mod pads_ui;
 mod plugin_ui;
+mod plugins_ui;
 mod rack_ui;
 mod samplers_ui;
 mod remote;
 mod remote_workflow;
+mod score_ui;
 mod session;
 mod synth_ui;
 pub mod theme;
 mod transport;
 mod versions_ui;
+mod video_ui;
 mod widgets;
 
 use crate::audio::engine::{Cmd, Status};
@@ -77,6 +80,8 @@ pub enum Payload {
     Pattern(&'static str),
     SessionClip { track: u64, scene: usize },
     Sample(PathBuf),
+    /// Index into the scanned plug-in list.
+    Plugin(usize),
 }
 
 impl Payload {
@@ -87,6 +92,7 @@ impl Payload {
             Payload::MidiFx(k) => k.name().to_string(),
             Payload::SessionClip { .. } => "Clip".into(),
             Payload::Sample(p) => p.file_name().map(|f| f.to_string_lossy().to_string()).unwrap_or_default(),
+            Payload::Plugin(_) => "Plug-in".into(),
         }
     }
 }
@@ -139,6 +145,8 @@ pub struct App {
     rack: rack_ui::RackUiState,
     chord_pads: composition_ui::ChordPadState,
     versions: versions_ui::VersionsState,
+    video: video_ui::VideoState,
+    plugins_state: plugins_ui::PluginsState,
     drag: Option<Payload>,
     info: Option<(String, String)>,
     kb_octave: i32,
@@ -242,6 +250,8 @@ impl App {
             rack: Default::default(),
             chord_pads: Default::default(),
             versions: Default::default(),
+            video: Default::default(),
+            plugins_state: Default::default(),
             drag: None,
             info: None,
             kb_octave: 4,
@@ -920,6 +930,7 @@ impl App {
         if let Some(stem) = path.file_stem() {
             self.project.name = stem.to_string_lossy().to_string();
         }
+        self.capture_plugin_states();
         match serde_json::to_string_pretty(&self.project).map_err(|e| e.to_string()).and_then(|s| std::fs::write(&path, s).map_err(|e| e.to_string())) {
             Ok(()) => {
                 self.toast(format!("Saved {}", path.display()));
@@ -1111,7 +1122,7 @@ impl App {
                     Key::O => self.file_open(),
                     Key::N => self.file_new(),
                     Key::D => self.duplicate_selected_clip(),
-                    Key::E => self.export = Some(export::ExportDialog::new(&self.project)),
+                    Key::E => self.export = Some(export::ExportDialog::new(&self.project, self.audio.sample_rate)),
                     Key::T => {
                         self.add_track_from_preset("Dub Stab", None);
                     }
@@ -1475,6 +1486,8 @@ impl eframe::App for App {
         self.chord_pads_window(ctx);
         self.rules_window(ctx);
         self.versions_window(ctx);
+        self.video_window(ctx);
+        self.sync_plugins();
         self.plugin_overlay_ui(ctx);
         self.update_arr_record();
         self.update_audio_record();

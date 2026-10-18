@@ -23,6 +23,8 @@ pub trait InstrumentDsp: Send {
     fn set_position(&mut self, _beat: f64, _playing: bool) {}
     /// Non-parameter instrument data (e.g. the B-303 pattern bank).
     fn set_extra(&mut self, _inst: &crate::model::Instrument) {}
+    /// Plug-in instruments: the bridge key (track id).
+    fn bind_key(&mut self, _key: u64) {}
     /// Data for the UI (e.g. the B-303 sequencer position).
     fn display(&self) -> Option<&[f32]> {
         None
@@ -50,6 +52,7 @@ pub fn create(kind: InstrumentKind, sr: f32) -> Box<dyn InstrumentDsp> {
         InstrumentKind::BeatPads => Box::new(super::beatpads::BeatPads::new(sr)),
         InstrumentKind::MultiSampler => Box::new(super::samplers::MultiSampler::new(sr)),
         InstrumentKind::Slicer => Box::new(super::samplers::Slicer::new(sr)),
+        InstrumentKind::Plugin => Box::new(PluginInst { runner: None, offs: vec![], sr, tempo: 120.0, playing: false }),
     }
 }
 
@@ -685,3 +688,74 @@ impl InstrumentDsp for PolySynth {
         self.counter = self.counter.wrapping_add(l.len() as u32);
     }
 }
+
+/// External plug-in instrument (runs in the sandboxed host).
+pub struct PluginInst {
+    runner: Option<super::plugbridge::Runner>,
+    /// Pending note-offs: (key, samples left).
+    offs: Vec<(u8, u32)>,
+    sr: f32,
+    tempo: f32,
+    playing: bool,
+}
+
+impl InstrumentDsp for PluginInst {
+    fn set_params(&mut self, _p: &[f32], _s: &[Option<String>]) {}
+    fn bind_key(&mut self, key: u64) {
+        if self.runner.is_none() {
+            self.runner = Some(super::plugbridge::Runner::new(key));
+        }
+        let _ = self.sr;
+    }
+    fn set_tempo(&mut self, bpm: f32) {
+        self.tempo = bpm;
+    }
+    fn set_position(&mut self, _beat: f64, playing: bool) {
+        self.playing = playing;
+    }
+    fn note_on(&mut self, pitch: u8, vel: u8, gate: Option<u32>, _slide: bool) {
+        if let Some(r) = self.runner.as_mut() {
+            r.note(true, pitch, vel);
+            if let Some(g) = gate {
+                self.offs.push((pitch, g));
+            }
+        }
+    }
+    fn note_off(&mut self, pitch: u8) {
+        if let Some(r) = self.runner.as_mut() {
+            r.note(false, pitch, 0);
+        }
+    }
+    fn all_off(&mut self) {
+        if let Some(r) = self.runner.as_mut() {
+            for (k, _) in self.offs.drain(..) {
+                r.note(false, k, 0);
+            }
+        }
+    }
+    fn render(&mut self, l: &mut [f32], r: &mut [f32]) {
+        let n = l.len() as u32;
+        if let Some(run) = self.runner.as_mut() {
+            let mut i = 0;
+            while i < self.offs.len() {
+                if self.offs[i].1 <= n {
+                    run.note(false, self.offs[i].0, 0);
+                    self.offs.swap_remove(i);
+                } else {
+                    self.offs[i].1 -= n;
+                    i += 1;
+                }
+            }
+            let mut a = [0.0f32; 64];
+            let mut b = [0.0f32; 64];
+            let k = l.len().min(64);
+            if run.process(&mut a[..k], &mut b[..k], self.tempo, self.playing) {
+                for j in 0..k {
+                    l[j] += a[j];
+                    r[j] += b[j];
+                }
+            }
+        }
+    }
+}
+

@@ -194,6 +194,11 @@ impl App {
                 }
                 InstrumentKind::MatrixFm => self.matrix_fm_ui(ui, track, &mut inst),
                 InstrumentKind::BeatPads => self.beat_pads_ui(ui, track, &mut inst),
+                InstrumentKind::Plugin => {
+                    if let Some(pr) = inst.plugin.clone() {
+                        self.plugin_panel(ui, track, &pr);
+                    }
+                }
                 InstrumentKind::Fm4 => {
                     ui.horizontal_top(|ui| {
                         ui.vertical(|ui| {
@@ -543,6 +548,11 @@ impl App {
                     DeviceKind::Analyzer => self.spectrum_ui(ui, &mut d),
                     DeviceKind::Tuner => self.tuner_ui(ui, &mut d),
                     DeviceKind::Rack => dirty |= self.rack_ui(ui, &mut d),
+                    DeviceKind::Plugin => {
+                        if let Some(pr) = d.plugin.clone() {
+                            self.plugin_panel(ui, d.id, &pr);
+                        }
+                    }
                     _ => {
                         ui.vertical(|ui| {
                             for row in 0..rows {
@@ -613,8 +623,9 @@ impl App {
             egui::FontId::proportional(11.5),
             TEXT_DIM,
         );
-        match self.drop_target(ui, rect, |p| matches!(p, Payload::Device(_) | Payload::MidiFx(_))) {
+        match self.drop_target(ui, rect, |p| matches!(p, Payload::Device(_) | Payload::MidiFx(_) | Payload::Plugin(_))) {
             Some(Payload::Device(kind)) => self.add_device(sel, kind, Some(n)),
+            Some(Payload::Plugin(i)) => self.add_plugin(i, Some(sel)),
             Some(Payload::MidiFx(kind)) => {
                 if let Sel::Track(t) = sel {
                     self.add_midi_fx(t, kind, None);

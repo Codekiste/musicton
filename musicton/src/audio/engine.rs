@@ -125,6 +125,9 @@ impl ChannelDsp {
             };
             dd.on = d.on;
             dd.sc = d.sc_source;
+            if d.kind == DeviceKind::Plugin {
+                dd.fx.set_plugin_key(d.id);
+            }
             if d.kind == DeviceKind::Rack {
                 dd.chains.resize_with(d.chains.len(), || ChannelDsp::new(sr));
                 for (cd, c) in dd.chains.iter_mut().zip(&d.chains) {
@@ -427,6 +430,9 @@ impl Engine {
             };
             td.ch.sync_devices(&t.channel.devices, sr);
             td.sync_mfx(&t.midi_fx);
+            if t.instrument.kind == InstrumentKind::Plugin {
+                td.inst.bind_key(t.id);
+            }
             if let Some(s) = td.playing {
                 if t.clips.get(s).is_none_or(|c| c.is_none()) {
                     td.playing = None;

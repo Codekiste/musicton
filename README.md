@@ -52,7 +52,7 @@ Audio läuft über ALSA bzw. PipeWire/PulseAudio (Standardgerät). Ein angeschlo
 
 **Instrumente:** Voltage (Analog-Polysynth: zwei Oszillatoren mit Pulsbreitenmodulation, Sub, Noise, 24/12-dB-Filter mit Drive, zwei Hüllkurven, LFO, Unison, Glide, Analog-Drift) · Matrix FM (6 Operatoren mit freier Modulationsmatrix inklusive Feedback, Hüllkurve und Ausgangspegel pro Operator) · Grain Cloud (Granular-Pad aus eigenen WAVs oder eingebauten Quellen, mit Scan, Spray, Pitch-Streuung, Oktaven und Reverse-Grains) · Beat Pads (16 Pads mit Sample oder Synth-Drum, Tuning, Decay, Choke-Gruppen und eigener Effektkette pro Pad) · Multi Sampler (Key- und Velocity-Zonen, Round Robin, Ordner-Import mit Notenerkennung im Dateinamen) · Slicer (zerlegt Loops an Transienten oder im Raster, Slices ab C1 spielbar, mit „Slices to Clip“) · B-303 Bassline (Acid-Bassline: Diodenkaskaden-artiges Filter, Accent-Sweep, Slide, interner Sequencer mit 8 Patterns, Shuffle, Scale, 5 Play-Modes, Drive- und Delay-Sektion, eigenes Plugin-Fenster) · Nexa (Preset-Rompler: 53 Presets in 10 Kategorien, bis zu 4 Layer, Macros, Arpeggiator, Trancegate, Effekte) · Drum Machine (10 Lanes, synthetisiert oder mit WAV pro Lane) · Acid Bass (mit Accent/Slide) · Poly Synth · Sampler (Classic/One-Shot/Slice, Tempo-Sync) · FM4 (4-Operator-FM, 8 Algorithmen) · Morph (Wavetable-Synth, 5 Tabellen, LFO/Env auf Position) · String Model (Karplus-Strong-Saite)
 
-**Audio-Effekte (43):** Beat Mangler, Heat Stack, Hybrid Reverb, Transient Shaper, Maximizer, True Peak Limiter, Stereo Imager, Filter Sweep, Pan LFO, Stutter, Channel EQ, Chorus, Compressor, Body Resonator, Drum Shaper, Tube Drive, Echo, Parametric EQ (mit Kurve), DJ EQ, Degrader, Triple Delay, Flanger, Frequency Shifter, Gate, Bus Compressor, Grain Delay, Limiter, Multiband Compressor (Upward- und Downward-Kompression), Overdrive, Pedal, Phaser, Ping Pong Delay, Bitcrusher, Chord Resonator, Reverb, Saturator, Sidechain, Stereo Delay, Spectrum, Tuner, Utility, Vinyl, Vocoder
+**Audio-Effekte (45):** Space Panner, Pitch Fix, Beat Mangler, Heat Stack, Hybrid Reverb, Transient Shaper, Maximizer, True Peak Limiter, Stereo Imager, Filter Sweep, Pan LFO, Stutter, Channel EQ, Chorus, Compressor, Body Resonator, Drum Shaper, Tube Drive, Echo, Parametric EQ (mit Kurve), DJ EQ, Degrader, Triple Delay, Flanger, Frequency Shifter, Gate, Bus Compressor, Grain Delay, Limiter, Multiband Compressor (Upward- und Downward-Kompression), Overdrive, Pedal, Phaser, Ping Pong Delay, Bitcrusher, Chord Resonator, Reverb, Saturator, Sidechain, Stereo Delay, Spectrum, Tuner, Utility, Vinyl, Vocoder
 
 **MIDI-Effekte:** Arpeggiator, Chord, Note Length, Pitch, Random, Scale, Strum, Velocity
 
@@ -68,6 +68,16 @@ Audio läuft über ALSA bzw. PipeWire/PulseAudio (Standardgerät). Ein angeschlo
 - Maximizer: Lautheit per Lookahead-Limiter, optional mit warmer Vorsättigung
 - True Peak Limiter: 4-fach überabgetastete True-Peak-Erkennung, Loudness-Meter mit Momentary, Short-term und Integrated LUFS sowie True Peak
 - Stereo Imager: Stereobreite in drei Bändern (Mono-Bass, breite Höhen), Korrelationsanzeige
+
+**Großprojekte:**
+- Plug-in-Hosting für VST3 und CLAP: Jedes Plug-in läuft in einem eigenen Sandbox-Prozess (`musicton-plughost`). Stürzt es ab, spielt Musicton einfach weiter. Musicton scannt `~/.clap`, `~/.vst3`, `/usr/lib/clap` und `/usr/lib/vst3`. Dazu gehören Instrumente und Effekte, Original-Editorfenster, ein allgemeines Parameter-Panel und gespeicherte Plug-in-Zustände. Beim Export rendert Musicton Plug-ins synchron und ohne Latenz.
+- Projektversionen: Snapshots mit Nachricht, ein lesbarer Vergleich mit dem aktuellen Stand und Wiederherstellen. Jedes Speichern legt automatisch eine Version an.
+- Notenansicht: Clips erscheinen als Noten auf einem Klaviersystem mit Vorzeichen, Pausen, Haltebögen und Akkorden. Dazu kommt ein MusicXML-Export für Notensatzprogramme.
+- Tonhöhenkorrektur (Pitch Fix): korrigiert in Echtzeit auf Tonart und Skala, natürlich oder hart.
+- Audio-zu-MIDI: Drums (Kick, Snare, Hi-Hat), Melodie (Tonhöhenverfolgung) und Harmonie (Akkorde pro Beat), jeweils auf einer neuen Spur.
+- Stem-Splitter: zerlegt einen Audio-Clip in Drums, Bass, Lead und Other. Das arbeitet mit Signalverarbeitung statt KI und eignet sich zum Remixen.
+- Video-Spur: Video importieren (über ffmpeg), Bildfenster synchron zum Playhead, Thumbnails in der Timeline, Ton auf eigener Spur. Der Export liefert ein MP4 mit dem fertigen Mix.
+- 3D/Binaural (Space Panner): Klänge für Kopfhörer rundum, oben oder hinten platzieren, mit Entfernung und kreisender Bewegung.
 
 **Komposition:**
 - Chord Track: Akkorde auf einer eigenen Spur über der Timeline. Ein Doppelklick fügt einen Akkord hinzu, der zur Tonart passt, ein Rechtsklick ändert Grundton und Typ.
@@ -123,13 +133,13 @@ Audio läuft über ALSA bzw. PipeWire/PulseAudio (Standardgerät). Ein angeschlo
 
 ## Noch nicht enthalten
 
-Netzwerk-Tempo-Sync, Audio-to-MIDI, Clip-Hüllkurven und Tempo-Automation, Freeze/Flatten, VST/LV2-Plug-ins.
+Netzwerk-Tempo-Sync, Clip-Hüllkurven und Tempo-Automation, Freeze/Flatten, LV2-Plug-ins.
 
 ## Fernsteuerung per MCP (für KI-Assistenten)
 
 Musicton öffnet beim Start einen lokalen Steuer-Port (`127.0.0.1:47800`, nur lokal erreichbar; abschalten mit `MUSICTON_NO_REMOTE=1`, anderer Port mit `MUSICTON_PORT`). Der MCP-Server `musicton-mcp` übersetzt MCP-Tool-Aufrufe darauf. Claude Code findet ihn über die `.mcp.json` im Projektordner.
 
-Die 61 Tools decken ab:
+Die 70 Tools decken ab:
 - **Zustand:** Projekt, Spuren, Clips mit Noten, Devices mit allen Parametern, Meter
 - **Transport und Launch:** Abspielen, Stoppen, Clips und Szenen starten
 - **Bearbeiten:** Spuren, Clips, Noten, Devices, Parameter, Automation, Timeline

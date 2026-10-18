@@ -29,6 +29,8 @@ pub struct RollState {
     pub ghosts: bool,
     pub rules_open: bool,
     pub rules: Vec<NoteRule>,
+    /// Show the clip as notation instead of the piano roll.
+    pub score: bool,
 }
 
 impl Default for RollState {
@@ -46,6 +48,7 @@ impl Default for RollState {
             ghosts: false,
             rules_open: false,
             rules: vec![NoteRule::new(RuleField::All, RuleOp::Equal, 0, 0, RuleAction::RandomVelocity, 10)],
+            score: false,
         }
     }
 }
@@ -101,7 +104,11 @@ impl App {
                     if kind == InstrumentKind::B303 && widgets::button(ui, "303 Pattern", false).on_hover_text("Back to the 303 step editor").clicked() {
                         self.b303_piano_roll = false;
                     }
-                    self.piano_roll(ui, r, track_id, kind);
+                    if self.roll.score {
+                        self.score_view(ui, r);
+                    } else {
+                        self.piano_roll(ui, r, track_id, kind);
+                    }
                 }
             });
         });
@@ -260,6 +267,18 @@ impl App {
                     self.roll.rules_open = !self.roll.rules_open;
                 }
                 self.hint(&r, "Note Rules", "Rule editor: if a note matches a condition (pitch, velocity, position ...), apply an action (transpose, velocity, length, chance, delete ...).");
+            });
+            ui.horizontal(|ui| {
+                let b = widgets::toggle(ui, "Score", self.roll.score, ACCENT, vec2(52.0, 18.0));
+                if b.clicked() {
+                    self.roll.score = !self.roll.score;
+                }
+                self.hint(&b, "Score View", "Shows the clip in standard notation instead of the piano roll.");
+                let b = widgets::button(ui, "MusicXML", false);
+                if b.clicked() {
+                    self.export_musicxml(r);
+                }
+                self.hint(&b, "Export MusicXML", "Saves the clip as MusicXML for notation programs.");
             });
             if let Some(i) = self.roll.selected {
                 if let Some(n) = c.notes.get_mut(i) {

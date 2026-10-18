@@ -1,7 +1,7 @@
 [workspace]
 resolver = "2"
-members = ["musicton", "crates/musicton-dsp", "crates/b303-core", "crates/b303-gui", "b303-plugin", "xtask"]
-default-members = ["musicton"]
+members = ["musicton", "crates/musicton-dsp", "crates/musicton-plugproto", "crates/musicton-plughost", "crates/b303-core", "crates/b303-gui", "b303-plugin", "xtask"]
+default-members = ["musicton", "crates/musicton-plughost"]
 
 [workspace.package]
 version = "0.1.0"

@@ -1,0 +1,19 @@
+[package]
+name = "musicton-plughost"
+description = "Sandbox process that hosts one VST3 or CLAP plug-in for Musicton"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+musicton-plugproto = { path = "../musicton-plugproto" }
+clap-sys = "0.5"
+vst3 = "0.3"
+libloading = "0.8"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+x11-dl = "2"

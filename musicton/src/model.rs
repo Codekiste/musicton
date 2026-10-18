@@ -29,6 +29,8 @@ pub enum InstrumentKind {
     BeatPads,
     MultiSampler,
     Slicer,
+    /// External VST3/CLAP instrument (runs in the sandboxed plug-in host).
+    Plugin,
 }
 
 impl InstrumentKind {
@@ -51,6 +53,7 @@ impl InstrumentKind {
             Self::BeatPads => "Beat Pads",
             Self::MultiSampler => "Multi Sampler",
             Self::Slicer => "Slicer",
+            Self::Plugin => "Plug-in",
         }
     }
     pub const ALL: [InstrumentKind; 15] = [
@@ -84,6 +87,7 @@ impl InstrumentKind {
             Self::B303 => "acid bassline: saw/square VCO, resonant diode-ladder style filter, accent with sweep circuit, slide - with a classic 16-step pattern editor.",
             Self::Voltage => "Analog-style polysynth: two oscillators with pulse-width modulation, sub and noise, 24/12 dB filter with drive, two envelopes, LFO, unison, glide and analog drift.",
             Self::MatrixFm => "Six-operator FM synth with a free modulation matrix: every operator can modulate every other (and itself), each with its own envelope and output level.",
+            Self::Plugin => "An installed VST3 or CLAP instrument. It runs in its own sandbox process: if it crashes, Musicton keeps playing.",
             Self::MultiSampler => "Multisample instrument: key and velocity zones, each with its own WAV, round robin, filter and envelopes. Load a folder and the notes in the file names map the zones automatically.",
             Self::Slicer => "Chops a loop into slices at its transients or on a beat grid and plays them from C1 upwards. One click turns the slices into a clip that replays the loop.",
             Self::BeatPads => "Sixteen pads, each with its own sample or synthesized drum voice, tuning, decay, choke group and its own effect chain.",
@@ -109,6 +113,7 @@ impl InstrumentKind {
             Self::BeatPads => &params::BEATPADS_PARAMS,
             Self::MultiSampler => &params::MULTI_PARAMS,
             Self::Slicer => &params::SLICER_PARAMS,
+            Self::Plugin => &[],
         }
     }
     /// Instruments whose clips are edited in the piano roll with a melodic range.
@@ -184,6 +189,8 @@ pub enum DeviceKind {
     StereoImager,
     SpacePanner,
     PitchFix,
+    /// External VST3/CLAP effect.
+    Plugin,
 }
 
 /// Browser folders for audio effect categories.
@@ -254,6 +261,7 @@ impl DeviceKind {
             Self::StereoImager => "Stereo Imager",
             Self::SpacePanner => "Space Panner",
             Self::PitchFix => "Pitch Fix",
+            Self::Plugin => "Plug-in",
         }
     }
     pub fn info(self) -> &'static str {
@@ -300,6 +308,7 @@ impl DeviceKind {
             Self::TransientShaper => "Boosts or softens the attack and the sustain of sounds independently of their level - punchier drums or tighter tails.",
             Self::Maximizer => "Loudness maximizer: input gain into a transparent lookahead limiter with optional warm pre-saturation.",
             Self::TruePeakLimiter => "Mastering limiter with 4x oversampled true-peak detection and a loudness meter (momentary, short-term, integrated LUFS, true peak).",
+            Self::Plugin => "An installed VST3 or CLAP effect, running in its own sandbox process.",
             Self::SpacePanner => "Binaural 3D panner for headphones: place a sound anywhere around, above or behind you, set its distance, let it orbit your head.",
             Self::PitchFix => "Real-time pitch correction for monophonic voices and instruments: snaps the pitch to the key and scale, from natural (slow) to hard robotic (fast).",
             Self::StereoImager => "Three-band stereo width (mono bass, wide highs) with adjustable crossovers and a correlation meter.",
@@ -354,6 +363,7 @@ impl DeviceKind {
             Self::StereoImager => &params::IMAGER_PARAMS,
             Self::SpacePanner => &params::SPACE_PARAMS,
             Self::PitchFix => &params::PITCHFIX_PARAMS,
+            Self::Plugin => &[],
         }
     }
 }
@@ -442,6 +452,9 @@ pub struct Instrument {
     /// Multi Sampler only.
     #[serde(default)]
     pub zones: Vec<Zone>,
+    /// Plug-in instruments only.
+    #[serde(default)]
+    pub plugin: Option<PluginRef>,
 }
 
 /// A key/velocity zone of the Multi Sampler.
@@ -588,7 +601,7 @@ impl Instrument {
         };
         let bank = (kind == InstrumentKind::B303).then(SeqBank::factory);
         let pads = if kind == InstrumentKind::BeatPads { Pad::default_set() } else { vec![] };
-        Self { kind, params: params::defaults(kind.defs()), samples, bank, pads, zones: vec![] }
+        Self { kind, params: params::defaults(kind.defs()), samples, bank, pads, zones: vec![], plugin: None }
     }
     pub fn normalize(&mut self) {
         normalize_params(&mut self.params, self.kind.defs());
@@ -618,6 +631,43 @@ pub struct Device {
     /// Rack only: parallel chains whose outputs are summed.
     #[serde(default)]
     pub chains: Vec<RackChain>,
+    /// External plug-in loaded by a `Plugin` device.
+    #[serde(default)]
+    pub plugin: Option<PluginRef>,
+}
+
+/// A parameter of an external plug-in.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct PlugParam {
+    pub id: u32,
+    pub name: String,
+    pub min: f64,
+    pub max: f64,
+    pub default: f64,
+    pub steps: u32,
+}
+
+/// An external VST3/CLAP plug-in with its saved settings.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct PluginRef {
+    /// "vst3" or "clap".
+    pub format: String,
+    pub path: String,
+    pub id: String,
+    pub name: String,
+    #[serde(default)]
+    pub vendor: String,
+    #[serde(default)]
+    pub has_gui: bool,
+    /// Known parameters (filled when the plug-in loads).
+    #[serde(default)]
+    pub infos: Vec<PlugParam>,
+    /// Current parameter values by id.
+    #[serde(default)]
+    pub values: Vec<(u32, f64)>,
+    /// Opaque plug-in state, base64.
+    #[serde(default)]
+    pub state: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -639,7 +689,7 @@ impl RackChain {
 impl Device {
     pub fn new(id: u64, kind: DeviceKind) -> Self {
         let chains = if kind == DeviceKind::Rack { vec![RackChain::new("Chain 1"), RackChain::new("Chain 2")] } else { vec![] };
-        Self { id, kind, on: true, params: params::defaults(kind.defs()), sc_source: None, chains }
+        Self { id, kind, on: true, params: params::defaults(kind.defs()), sc_source: None, chains, plugin: None }
     }
     pub fn with(mut self, idx: usize, v: f32) -> Self {
         self.params[idx] = v;
@@ -1170,6 +1220,20 @@ pub struct Project {
     pub playlist: Vec<PlaylistBlock>,
     #[serde(default)]
     pub chords: Vec<ChordEvent>,
+    #[serde(default)]
+    pub video: Option<VideoTrack>,
+}
+
+/// A video placed on the timeline (frames are extracted for display).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct VideoTrack {
+    pub path: String,
+    /// Timeline position of the first frame, in steps.
+    pub start: u32,
+    pub duration: f32,
+    /// Folder with the extracted PNG frames.
+    pub frames: String,
+    pub frame_count: u32,
 }
 
 fn default_key() -> u8 {
@@ -1251,6 +1315,7 @@ impl Project {
             chain_on: false,
             playlist: vec![],
             chords: vec![],
+            video: None,
         }
     }
 

@@ -28,6 +28,34 @@ pub trait Effect: Send {
     }
     /// External sidechain signal for this block (called before `process`).
     fn sidechain_input(&mut self, _l: &[f32], _r: &[f32]) {}
+    /// Plug-in devices: which bridge (by device id) this effect talks to.
+    fn set_plugin_key(&mut self, _key: u64) {}
+}
+
+/// External plug-in effect: audio goes through the sandboxed host process.
+pub struct PluginFx {
+    runner: Option<super::plugbridge::Runner>,
+    dry: [[f32; 64]; 2],
+}
+
+impl Effect for PluginFx {
+    fn set_params(&mut self, _: &[f32], _: &Ctx) {}
+    fn set_plugin_key(&mut self, key: u64) {
+        if self.runner.is_none() {
+            self.runner = Some(super::plugbridge::Runner::new(key));
+        }
+    }
+    fn process(&mut self, l: &mut [f32], r: &mut [f32], ctx: &Ctx) {
+        let Some(run) = self.runner.as_mut() else { return };
+        let n = l.len().min(64);
+        self.dry[0][..n].copy_from_slice(&l[..n]);
+        self.dry[1][..n].copy_from_slice(&r[..n]);
+        if !run.process(l, r, ctx.bpm, ctx.playing) {
+            // Not running (loading or crashed): pass the signal through.
+            l[..n].copy_from_slice(&self.dry[0][..n]);
+            r[..n].copy_from_slice(&self.dry[1][..n]);
+        }
+    }
 }
 
 /// Racks are processed by the engine; the effect object itself does nothing.
@@ -87,6 +115,7 @@ pub fn create(kind: DeviceKind, sr: f32) -> Box<dyn Effect> {
         DeviceKind::StereoImager => Box::new(e3::Imager::default()),
         DeviceKind::SpacePanner => Box::new(super::effects4::SpacePanner::new(sr)),
         DeviceKind::PitchFix => Box::new(super::effects4::PitchFix::new(sr)),
+        DeviceKind::Plugin => Box::new(PluginFx { runner: None, dry: [[0.0; 64]; 2] }),
     }
 }
 

@@ -5,7 +5,9 @@ mod model;
 mod params;
 mod presets;
 mod remote;
+mod score;
 mod versions;
+mod video;
 mod ui;
 #[cfg(test)]
 mod tests_workflow;

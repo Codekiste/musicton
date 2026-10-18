@@ -130,7 +130,7 @@ impl App {
             self.renaming = Some((RenameTarget::Track(id), name.clone()));
         }
         resp.context_menu(|ui| self.track_menu(ui, id));
-        if let Some(p) = self.drop_target(ui, r, |p| matches!(p, Payload::Device(_) | Payload::Instrument(_) | Payload::MidiFx(_))) {
+        if let Some(p) = self.drop_target(ui, r, |p| matches!(p, Payload::Device(_) | Payload::Instrument(_) | Payload::MidiFx(_) | Payload::Plugin(_))) {
             self.drop_on_track(id, p);
         }
         self.hint(&resp, &name, "Track title bar. Click to select and show its devices, double-click to rename, right-click for options. Drop instruments or effects here.");
@@ -140,6 +140,7 @@ impl App {
     pub(super) fn drop_on_track(&mut self, id: u64, payload: Payload) {
         match payload {
             Payload::Device(kind) => self.add_device(Sel::Track(id), kind, None),
+            Payload::Plugin(i) => self.add_plugin(i, Some(Sel::Track(id))),
             Payload::MidiFx(kind) => self.add_midi_fx(id, kind, None),
             Payload::Instrument(preset) => {
                 let pr = crate::presets::preset(preset);
@@ -293,7 +294,7 @@ impl App {
             }
             // The empty area below the slots belongs to the track too.
             let below = Rect::from_min_max(pos2(x, rect.top() + n_scenes as f32 * SLOT_H), pos2(x + COL_W - 1.0, rect.bottom()));
-            if let Some(p) = self.drop_target(ui, below, |p| matches!(p, Payload::Device(_) | Payload::MidiFx(_) | Payload::Instrument(_))) {
+            if let Some(p) = self.drop_target(ui, below, |p| matches!(p, Payload::Device(_) | Payload::MidiFx(_) | Payload::Instrument(_) | Payload::Plugin(_))) {
                 self.drop_on_track(id, p);
             }
         }
@@ -308,7 +309,7 @@ impl App {
             self.add_track_from_preset("Dub Stab", None);
         }
         self.hint(&resp, "Add Tracks", "Drop an instrument here to create a new track, a clip to create a track that fits it, or a WAV sample to create an audio track. Right-click to add tracks.");
-        match self.drop_target(ui, drop, |p| matches!(p, Payload::Instrument(_) | Payload::Pattern(_) | Payload::Sample(_))) {
+        match self.drop_target(ui, drop, |p| matches!(p, Payload::Instrument(_) | Payload::Pattern(_) | Payload::Sample(_) | Payload::Plugin(_))) {
             Some(Payload::Sample(path)) => {
                 let id = self.add_audio_track(None);
                 let pos = ui.ctx().input(|i| i.pointer.latest_pos()).unwrap_or(rect.min);
@@ -318,6 +319,7 @@ impl App {
             Some(Payload::Instrument(preset)) => {
                 self.add_track_from_preset(preset, None);
             }
+            Some(Payload::Plugin(i)) => self.add_plugin(i, None),
             Some(Payload::Pattern(name)) => {
                 if let Some(pat) = crate::presets::pattern(name) {
                     let preset = crate::presets::INSTRUMENT_PRESETS.iter().find(|p| p.kind == pat.kind).unwrap().name;
@@ -506,7 +508,7 @@ impl App {
             }
         });
         match self.drop_target(ui, r, |p| !matches!(p, Payload::SessionClip { track: t, scene: s } if *t == track && *s == scene)) {
-            Some(p @ (Payload::Device(_) | Payload::MidiFx(_) | Payload::Instrument(_))) => self.drop_on_track(track, p),
+            Some(p @ (Payload::Device(_) | Payload::MidiFx(_) | Payload::Instrument(_) | Payload::Plugin(_))) => self.drop_on_track(track, p),
             Some(Payload::Pattern(name)) => self.place_pattern(track, scene, name),
             Some(Payload::Sample(path)) => self.drop_sample_on_slot(track, scene, &path),
             Some(Payload::SessionClip { track: st, scene: ss }) => {
@@ -855,7 +857,7 @@ impl App {
             }
             self.touch();
         }
-        match self.drop_target(ui, r, |p| matches!(p, Payload::Device(_) | Payload::MidiFx(_) | Payload::Instrument(_))) {
+        match self.drop_target(ui, r, |p| matches!(p, Payload::Device(_) | Payload::MidiFx(_) | Payload::Instrument(_) | Payload::Plugin(_))) {
             Some(Payload::Device(kind)) => self.add_device(sel, kind, None),
             Some(p) => {
                 if let Sel::Track(id) = sel {

@@ -108,10 +108,12 @@ impl App {
         let full = ui.available_rect_before_wrap();
         ui.allocate_rect(full, Sense::hover());
         let ruler = Rect::from_min_max(pos2(full.left() + HEADER_W, full.top()), pos2(full.right(), full.top() + RULER_H));
-        let top_h = RULER_H + MARK_H + SEC_H + CHORD_H;
+        let video_h = if self.project.video.is_some() { super::video_ui::VIDEO_H } else { 0.0 };
+        let top_h = RULER_H + MARK_H + SEC_H + CHORD_H + video_h;
         let marks = Rect::from_min_max(pos2(ruler.left(), ruler.bottom()), pos2(ruler.right(), ruler.bottom() + MARK_H));
         let secs = Rect::from_min_max(pos2(ruler.left(), marks.bottom()), pos2(ruler.right(), marks.bottom() + SEC_H));
         let chords = Rect::from_min_max(pos2(ruler.left(), secs.bottom()), pos2(ruler.right(), secs.bottom() + CHORD_H));
+        let video_r = Rect::from_min_max(pos2(ruler.left(), chords.bottom()), pos2(ruler.right(), chords.bottom() + video_h));
         let lanes = Rect::from_min_max(pos2(full.left() + HEADER_W, full.top() + top_h), full.max);
         let headers = Rect::from_min_max(pos2(full.left(), full.top() + top_h), pos2(full.left() + HEADER_W, full.bottom()));
         let pps = self.arr.pps;
@@ -230,6 +232,9 @@ impl App {
         self.marker_strip(ui, marks, &x_of);
         self.section_lane(ui, secs, &x_of);
         self.chord_lane(ui, chords, &x_of);
+        if video_h > 0.0 {
+            self.video_lane(ui, video_r, &x_of);
+        }
         // Corner with tools.
         let corner = Rect::from_min_max(full.min, pos2(full.left() + HEADER_W, full.top() + top_h));
         p.rect_filled(corner, 0.0, PANEL);
@@ -412,7 +417,7 @@ impl App {
             self.detail = Detail::Devices;
         }
         resp.context_menu(|ui| self.track_menu(ui, id));
-        if let Some(p) = self.drop_target(ui, r, |p| matches!(p, Payload::Device(_) | Payload::MidiFx(_) | Payload::Instrument(_))) {
+        if let Some(p) = self.drop_target(ui, r, |p| matches!(p, Payload::Device(_) | Payload::MidiFx(_) | Payload::Instrument(_) | Payload::Plugin(_))) {
             self.drop_on_track(id, p);
         }
         self.hint(&resp, &name, "Track header. Click to select, right-click for options. Drop effects or instruments here.");

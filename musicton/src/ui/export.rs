@@ -14,11 +14,13 @@ pub struct ExportDialog {
     depth: BitDepth,
     normalize: bool,
     stems: bool,
+    with_video: bool,
 }
 
 impl ExportDialog {
-    pub fn new(p: &Project) -> Self {
-        Self { arrangement: p.arrangement_end() > 0, scene: 0, bars: 16, sample_rate: 44100, depth: BitDepth::Int16, normalize: false, stems: false }
+    /// Defaults to the live sample rate (plug-ins run at that rate).
+    pub fn new(p: &Project, live_rate: u32) -> Self {
+        Self { arrangement: p.arrangement_end() > 0, scene: 0, bars: 16, sample_rate: if [44100, 48000, 88200, 96000].contains(&live_rate) { live_rate } else { 48000 }, depth: BitDepth::Int16, normalize: false, stems: false, with_video: p.video.is_some() }
     }
 }
 
@@ -30,7 +32,16 @@ impl App {
             match done {
                 Some(Ok(path)) => {
                     self.export_job = None;
-                    self.toast(format!("Exported {path}"));
+                    match (self.video.mux_after_export.take(), self.project.video.clone()) {
+                        (Some(mp4), Some(v)) => {
+                            let offset = v.start as f32 / 4.0 * 60.0 / self.project.bpm.max(1.0);
+                            match crate::video::mux(&v.path, &path, offset, &mp4) {
+                                Ok(()) => self.toast(format!("Exported {mp4}")),
+                                Err(e) => self.toast(format!("Video mux failed: {e}")),
+                            }
+                        }
+                        _ => self.toast(format!("Exported {path}")),
+                    }
                 }
                 Some(Err(e)) => {
                     self.export_job = None;
@@ -109,6 +120,11 @@ impl App {
                     ui.label("Normalize");
                     ui.checkbox(&mut d.normalize, "");
                     ui.end_row();
+                    if self.project.video.is_some() && d.arrangement && !d.stems {
+                        ui.label("Video");
+                        ui.checkbox(&mut d.with_video, "Also write an MP4 with the video");
+                        ui.end_row();
+                    }
                 });
                 ui.add_space(8.0);
                 ui.horizontal(|ui| {
@@ -130,6 +146,9 @@ impl App {
             if let Some(mut path) = rfd::FileDialog::new().add_filter("WAV", &["wav"]).set_file_name(name).save_file() {
                 if path.extension().is_none() {
                     path.set_extension("wav");
+                }
+                if d.with_video && d.arrangement && self.project.video.is_some() {
+                    self.video.mux_after_export = Some(path.with_extension("mp4").to_string_lossy().to_string());
                 }
                 self.export_job = Some(export_wav(
                     self.project.clone(),

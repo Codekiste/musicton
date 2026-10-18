@@ -5,9 +5,10 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 export PATH="$HOME/.cargo/bin:$PATH"
-cargo build --release -p musicton
+cargo build --release -p musicton -p musicton-plughost
 install -Dm755 target/release/musicton "$HOME/.local/bin/musicton"
 install -Dm755 target/release/musicton-mcp "$HOME/.local/bin/musicton-mcp"
+install -Dm755 target/release/musicton-plughost "$HOME/.local/bin/musicton-plughost"
 install -Dm644 assets/musicton.desktop "$HOME/.local/share/applications/musicton.desktop"
 install -Dm644 assets/musicton.svg "$HOME/.local/share/icons/hicolor/scalable/apps/musicton.svg"
 update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true

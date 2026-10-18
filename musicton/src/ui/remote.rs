@@ -45,6 +45,9 @@ fn device_json(d: &Device) -> Value {
     if let Some(sc) = d.sc_source {
         o["sidechain_from_track_id"] = json!(sc);
     }
+    if let Some(p) = &d.plugin {
+        o["plugin"] = json!({"name": p.name, "format": p.format, "params": p.infos.len()});
+    }
     if d.kind == DeviceKind::Rack {
         o["chains"] = Value::Array(
             d.chains
@@ -1056,6 +1059,7 @@ impl App {
         }
         .clamp(0.25, 512.0);
         let secs = bars * 4.0 * 60.0 / p.bpm;
+        let _plugins = crate::audio::plugbridge::OfflineGuard::new();
         let mut e = Engine::new(sr as f32, Arc::new(p.clone()));
         match source {
             "arrangement" => {
