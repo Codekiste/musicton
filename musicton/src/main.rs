@@ -5,6 +5,7 @@ mod model;
 mod params;
 mod presets;
 mod remote;
+mod score;
 mod versions;
 mod ui;
 #[cfg(test)]

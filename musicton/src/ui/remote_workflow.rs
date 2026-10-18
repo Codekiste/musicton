@@ -62,6 +62,18 @@ impl App {
             "transform_clip" => self.cmd_transform(a),
             "add_chord_to_clip" => self.cmd_clip_chord(a),
             "versions" => self.cmd_versions(a),
+            "export_musicxml" => {
+                let r = match self.clip_ref(a) {
+                    Ok(r) => r,
+                    Err(e) => return Some(Err(e)),
+                };
+                let Some(clip) = self.clip(r).cloned() else { return Some(Err("no clip there".into())) };
+                let xml = crate::score::to_musicxml(&clip, &self.project.name, self.project.bpm, self.project.key, self.project.scale);
+                match s(a, "path") {
+                    Some(p) => std::fs::write(p, &xml).map(|_| json!({ "written": p, "bytes": xml.len() })).map_err(|e| e.to_string()),
+                    None => Ok(json!({ "musicxml": xml })),
+                }
+            }
             "audio_to_midi" => {
                 let r = match self.clip_ref(a) {
                     Ok(r) => r,

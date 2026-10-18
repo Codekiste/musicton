@@ -162,3 +162,33 @@ fn versions_save_list_diff_restore() {
     assert_eq!(versions::format_time(1_792_324_800), "2026-10-18 12:00 UTC");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn notation_spelling_and_events() {
+    use crate::score::*;
+    let minor = SCALES.iter().position(|s| s.0 == "Minor").unwrap();
+    let major = SCALES.iter().position(|s| s.0 == "Major").unwrap();
+    assert_eq!(key_signature(9, minor), 0); // A minor
+    assert_eq!(key_signature(4, minor), 1); // E minor
+    assert_eq!(key_signature(5, major), -1); // F major
+    assert_eq!(key_signature(2, major), 2); // D major
+    assert_eq!(spell(61, 2), (0, 1)); // C# in D major
+    assert_eq!(spell(70, -1), (6, -1)); // Bb in F major
+    assert_eq!(sig_accidental(6, -1), -1);
+    assert_eq!(staff_pos(60, 0), 28);
+    assert_eq!(staff_pos(77, 0), 38); // F5 top treble line
+    // Chord on beat 1 for a half note, rest, then a note tied over the bar line.
+    let mut clip = Clip::new("x", CLIP_COLORS[0], 2);
+    clip.notes = vec![note(0, 8, 60), note(0, 8, 64), note(12, 8, 67)];
+    let ev = score_events(&clip);
+    assert_eq!((ev[0].start, ev[0].dur, ev[0].pitches.clone()), (0, 8, vec![60, 64]));
+    assert!(ev[1].pitches.is_empty() && ev[1].dur == 4);
+    let tied: Vec<&ScoreEvent> = ev.iter().filter(|e| e.pitches == vec![67]).collect();
+    assert_eq!(tied.len(), 2);
+    assert!(tied[0].tie_start && tied[1].tie_stop && tied[1].start == 16);
+    let total: u32 = ev.iter().map(|e| e.dur).sum();
+    assert_eq!(total, 32);
+    let xml = to_musicxml(&clip, "Test", 128.0, 9, minor);
+    assert!(xml.contains("<chord/>") && xml.contains("<tie type=\"start\"/>") && xml.contains("<measure number=\"2\">"));
+    assert!(xml.contains("<fifths>0</fifths>") && xml.contains("<per-minute>128</per-minute>"));
+}

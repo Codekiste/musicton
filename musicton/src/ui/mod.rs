@@ -16,6 +16,7 @@ mod rack_ui;
 mod samplers_ui;
 mod remote;
 mod remote_workflow;
+mod score_ui;
 mod session;
 mod synth_ui;
 pub mod theme;
