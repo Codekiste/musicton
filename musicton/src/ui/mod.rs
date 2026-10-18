@@ -1,6 +1,7 @@
 //! Application shell: layout, selection, undo, keyboard, files, live playing and recording.
 
 mod arrangement;
+mod arranger;
 mod browser;
 mod clip_editor;
 mod devices;
@@ -8,7 +9,9 @@ mod export;
 mod instruments_ui;
 mod mapping;
 mod plugin_ui;
+mod rack_ui;
 mod remote;
+mod remote_workflow;
 mod session;
 pub mod theme;
 mod transport;
@@ -127,6 +130,7 @@ pub struct App {
     sel_clip: Option<ClipRef>,
     sel_scene: usize,
     sel_device: Option<u64>,
+    rack: rack_ui::RackUiState,
     drag: Option<Payload>,
     info: Option<(String, String)>,
     kb_octave: i32,
@@ -227,6 +231,7 @@ impl App {
             sel_clip: None,
             sel_scene: 0,
             sel_device: None,
+            rack: Default::default(),
             drag: None,
             info: None,
             kb_octave: 4,

@@ -232,7 +232,7 @@ impl App {
     }
 
     fn add_track_menu_items(&mut self, ui: &mut egui::Ui) {
-        for (label, preset) in [("Add Drum Track", "909 Punch"), ("Add Bass Track", "TB Acid"), ("Add Synth Track", "Dub Stab"), ("Add Sampler Track", "Sampler")] {
+        for (label, preset) in [("Add Drum Track", "Punch Kit"), ("Add Bass Track", "Classic Acid"), ("Add Synth Track", "Dub Stab"), ("Add Sampler Track", "Sampler")] {
             if ui.button(label).clicked() {
                 self.add_track_from_preset(preset, None);
                 ui.close_menu();
@@ -658,6 +658,40 @@ impl App {
         self.mixer_strip(ui, r, Sel::Master, 0);
     }
 
+    /// Track output routing: master, a return, or any other track (groups, resampling, buses).
+    fn output_combo(&mut self, ui: &mut egui::Ui, id: u64) {
+        let Some(t) = self.project.track(id) else { return };
+        let name_of = |o: Output, p: &Project| match o {
+            Output::Master => "Master".to_string(),
+            Output::Return(k) => format!("Ret {}", ["A", "B"][(k as usize).min(1)]),
+            Output::Track(tid) => p.track(tid).map(|t| t.name.clone()).unwrap_or_else(|| "?".into()),
+        };
+        let cur = t.output;
+        let mut new = cur;
+        let options: Vec<(Output, String)> = [Output::Master, Output::Return(0), Output::Return(1)]
+            .into_iter()
+            .chain(self.project.tracks.iter().filter(|x| x.id != id).map(|x| Output::Track(x.id)))
+            .map(|o| (o, name_of(o, &self.project)))
+            .collect();
+        let r = egui::ComboBox::from_id_salt(("out", id))
+            .width(58.0)
+            .selected_text(egui::RichText::new(name_of(cur, &self.project)).size(9.5))
+            .show_ui(ui, |ui| {
+                for (o, n) in &options {
+                    if ui.selectable_label(*o == cur, n).clicked() {
+                        new = *o;
+                    }
+                }
+            });
+        self.hint(&r.response, "Output", "Where this track goes after its fader: the master, a return, or another track (build buses, resample, or feed effects). Feedback loops fall back to the master.");
+        if new != cur {
+            if let Some(t) = self.project.track_mut(id) {
+                t.output = new;
+            }
+            self.touch();
+        }
+    }
+
     fn mixer_strip(&mut self, ui: &mut egui::Ui, r: Rect, sel: Sel, number: usize) {
         let armed_audio = match sel {
             Sel::Track(id) => self.project.track(id).is_some_and(|t| t.arm && t.instrument.kind == InstrumentKind::Audio),
@@ -691,6 +725,9 @@ impl App {
                 if let Sel::Track(_) = sel {
                     ui.horizontal(|ui| {
                         ui.label(egui::RichText::new("Sends").size(10.0).color(TEXT_DIM));
+                        if let Sel::Track(id) = sel {
+                            self.output_combo(ui, id);
+                        }
                     });
                     ui.horizontal(|ui| {
                         let r1 = widgets::send_knob(ui, &mut ch.sends[0], "A");

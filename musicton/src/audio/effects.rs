@@ -25,6 +25,17 @@ pub trait Effect: Send {
     fn display(&self) -> Option<&[f32]> {
         None
     }
+    /// External sidechain signal for this block (called before `process`).
+    fn sidechain_input(&mut self, _l: &[f32], _r: &[f32]) {}
+}
+
+/// Racks are processed by the engine; the effect object itself does nothing.
+#[derive(Default)]
+pub struct Passthrough;
+
+impl Effect for Passthrough {
+    fn set_params(&mut self, _: &[f32], _: &Ctx) {}
+    fn process(&mut self, _: &mut [f32], _: &mut [f32], _: &Ctx) {}
 }
 
 pub fn create(kind: DeviceKind, sr: f32) -> Box<dyn Effect> {
@@ -65,6 +76,7 @@ pub fn create(kind: DeviceKind, sr: f32) -> Box<dyn Effect> {
         DeviceKind::Tuner => Box::new(e2::Tuner::new(sr)),
         DeviceKind::Vocoder => Box::new(e2::Vocoder::new(sr)),
         DeviceKind::ChannelEq => Box::new(e2::ChannelEq::default()),
+        DeviceKind::Rack => Box::new(Passthrough),
     }
 }
 
@@ -385,6 +397,7 @@ struct Compressor {
     makeup: f32,
     env: f32,
     gr: f32,
+    sc: Option<[f32; MAX_BLOCK]>,
 }
 
 impl Effect for Compressor {
@@ -398,8 +411,12 @@ impl Effect for Compressor {
     fn process(&mut self, l: &mut [f32], r: &mut [f32], _: &Ctx) {
         let knee = 6.0;
         let mut max_gr: f32 = 0.0;
+        let sc = self.sc.take();
         for i in 0..l.len() {
-            let peak = l[i].abs().max(r[i].abs());
+            let peak = match &sc {
+                Some(s) => s[i],
+                None => l[i].abs().max(r[i].abs()),
+            };
             let c = if peak > self.env { self.att } else { self.rel };
             self.env = peak + c * (self.env - peak);
             let lvl = gain_to_db(self.env);
@@ -421,6 +438,13 @@ impl Effect for Compressor {
     }
     fn reduction(&self) -> f32 {
         self.gr
+    }
+    fn sidechain_input(&mut self, l: &[f32], r: &[f32]) {
+        let mut b = [0.0f32; MAX_BLOCK];
+        for i in 0..l.len().min(MAX_BLOCK) {
+            b[i] = l[i].abs().max(r[i].abs());
+        }
+        self.sc = Some(b);
     }
 }
 
@@ -475,6 +499,8 @@ struct Sidechain {
     env: f32,
     target: f32,
     gr: f32,
+    sc: Option<[f32; MAX_BLOCK]>,
+    follow: f32,
 }
 
 impl Effect for Sidechain {
@@ -485,9 +511,29 @@ impl Effect for Sidechain {
     fn on_kick(&mut self) {
         self.target = 1.0;
     }
+    fn sidechain_input(&mut self, l: &[f32], r: &[f32]) {
+        let mut b = [0.0f32; MAX_BLOCK];
+        for i in 0..l.len().min(MAX_BLOCK) {
+            b[i] = l[i].abs().max(r[i].abs());
+        }
+        self.sc = Some(b);
+    }
     fn process(&mut self, l: &mut [f32], r: &mut [f32], ctx: &Ctx) {
         let att = one_pole_coef(0.003, ctx.sr);
         let rel = decay_mult(self.release * 1.5, ctx.sr);
+        if let Some(sc) = self.sc.take() {
+            // External source: duck by the source's envelope (any track, not just kicks).
+            let frel = one_pole_coef(self.release / 3.0, ctx.sr);
+            for i in 0..l.len() {
+                let x = (sc[i] * 2.0).min(1.0);
+                self.follow = if x > self.follow { x + att * (self.follow - x) } else { x + frel * (self.follow - x) };
+                let g = 1.0 - self.amount * self.follow;
+                l[i] *= g;
+                r[i] *= g;
+            }
+            self.gr = -gain_to_db(1.0 - self.amount * self.follow);
+            return;
+        }
         for i in 0..l.len() {
             if self.target > 0.0 {
                 self.env = self.target + att * (self.env - self.target);

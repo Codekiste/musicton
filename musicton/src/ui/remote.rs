@@ -40,6 +40,30 @@ fn arg_bool(a: &Value, k: &str) -> Option<bool> {
     a.get(k).and_then(|v| v.as_bool())
 }
 
+fn device_json(d: &Device) -> Value {
+    let mut o = json!({"id": d.id, "type": d.kind.name(), "on": d.on});
+    if let Some(sc) = d.sc_source {
+        o["sidechain_from_track_id"] = json!(sc);
+    }
+    if d.kind == DeviceKind::Rack {
+        o["chains"] = Value::Array(
+            d.chains
+                .iter()
+                .map(|c| json!({"name": c.name, "volume": c.volume, "pan": c.pan, "mute": c.mute, "devices": c.devices.iter().map(device_json).collect::<Vec<_>>()}))
+                .collect(),
+        );
+    }
+    o
+}
+
+pub(super) fn output_name(o: Output, p: &Project) -> String {
+    match o {
+        Output::Master => "master".into(),
+        Output::Return(k) => format!("return_{}", ["a", "b"][(k as usize).min(1)]),
+        Output::Track(id) => p.track(id).map(|t| t.name.clone()).unwrap_or_else(|| "?".into()),
+    }
+}
+
 fn params_json(defs: &[ParamDef], values: &[f32]) -> Value {
     Value::Array(
         defs.iter()
@@ -288,7 +312,7 @@ impl App {
 
     // -----------------------------------------------------------------------------------------
 
-    fn resolve_track(&self, v: Option<&Value>) -> Result<u64, String> {
+    pub(super) fn resolve_track(&self, v: Option<&Value>) -> Result<u64, String> {
         let v = v.ok_or("missing 'track' (index from get_state, or track name)")?;
         if let Some(i) = v.as_u64() {
             return self.project.tracks.get(i as usize).map(|t| t.id).ok_or(format!("no track with index {i}"));
@@ -314,7 +338,7 @@ impl App {
         self.resolve_track(v).map(Sel::Track)
     }
 
-    fn scene_arg(&self, a: &Value) -> Result<usize, String> {
+    pub(super) fn scene_arg(&self, a: &Value) -> Result<usize, String> {
         let s = arg_u64(a, "scene").ok_or("missing 'scene' (0-based index)")? as usize;
         if s < self.project.scenes.len() {
             Ok(s)
@@ -341,6 +365,9 @@ impl App {
         }
         if let Some(a) = &c.audio {
             o["audio"] = json!({ "path": a.path, "warp": format!("{:?}", a.warp), "bpm": a.bpm, "gain_db": a.gain, "transpose": a.transpose });
+        }
+        if c.gain != 0.0 {
+            o["clip_gain_db"] = json!(c.gain);
         }
         if let Some(f) = c.follow {
             o["follow"] = json!({ "action": f.action.name(), "bars": f.bars, "chance": f.chance });
@@ -374,7 +401,9 @@ impl App {
                     "playing_scene": ts.playing, "queued": ts.queued, "follows_arrangement": ts.follow_arr,
                     "meter_db": db(self.meter(t.id)[0].max(self.meter(t.id)[1])),
                     "clips": clips,
-                    "devices": t.channel.devices.iter().map(|d| json!({"id": d.id, "type": d.kind.name(), "on": d.on})).collect::<Vec<_>>(),
+                    "devices": t.channel.devices.iter().map(device_json).collect::<Vec<_>>(),
+                    "output": output_name(t.output, p),
+                    "modulators": t.modulators.iter().map(|m| json!({"id": m.id, "shape": m.shape.name(), "rate": m.rate, "synced": m.synced, "depth": m.depth, "target": m.target.map(|x| format!("{x:?}")), "on": m.on})).collect::<Vec<_>>(),
                     "midi_fx": t.midi_fx.iter().map(|m| json!({"id": m.id, "type": m.kind.name(), "on": m.on})).collect::<Vec<_>>(),
                     "arrangement_clips": t.arrangement.iter().map(|c| json!({"id": c.id, "name": c.clip.name, "start_bar": c.start as f32 / 16.0 + 1.0, "bars": c.len as f32 / 16.0})).collect::<Vec<_>>(),
                     "automation": t.automation.iter().map(|a| format!("{:?} ({} points)", a.target, a.points.len())).collect::<Vec<_>>(),
@@ -392,6 +421,10 @@ impl App {
                 "key": NOTE_NAMES[p.key as usize % 12], "scale": SCALES[p.scale.min(SCALES.len() - 1)].0,
                 "loop": { "on": p.loop_on, "start_bar": p.loop_start / 16 + 1, "bars": p.loop_len / 16 },
                 "crossfader": p.crossfader, "arrangement_bars": p.arrangement_end() as f32 / 16.0,
+                "markers": p.markers.iter().map(|m| json!({"id": m.id, "name": m.name, "bar": m.pos as f32 / 16.0 + 1.0})).collect::<Vec<_>>(),
+                "sections": p.sections.iter().map(|x| json!({"id": x.id, "name": x.name, "start_bar": x.start as f32 / 16.0 + 1.0, "bars": x.len as f32 / 16.0})).collect::<Vec<_>>(),
+                "chain": { "on": p.chain_on, "order": p.chain.iter().filter_map(|id| p.sections.iter().find(|x| x.id == *id).map(|x| x.name.clone())).collect::<Vec<_>>() },
+                "playlist": p.playlist.iter().map(|b| json!({"id": b.id, "scene": b.scene, "start_bar": b.start as f32 / 16.0 + 1.0, "bars": b.len as f32 / 16.0, "lane": b.lane})).collect::<Vec<_>>(),
                 "file": self.file.as_ref().map(|f| f.display().to_string()),
             },
             "transport": {
@@ -414,6 +447,9 @@ impl App {
     }
 
     fn exec(&mut self, cmd: &str, a: &Value) -> R {
+        if let Some(r) = self.exec_workflow(cmd, a) {
+            return r;
+        }
         match cmd {
             "ping" => Ok(json!({ "app": "Musicton", "version": env!("CARGO_PKG_VERSION") })),
             "get_state" => Ok(self.state_json()),
@@ -782,6 +818,9 @@ impl App {
                 }
                 if let Some(b) = arg_f32(a, "bars") {
                     c.len = ((b * 4.0).round() as u32).max(1) * 4;
+                }
+                if let Some(g) = arg_f32(a, "clip_gain_db") {
+                    c.gain = g.clamp(-36.0, 12.0);
                 }
                 if let Some(n) = notes {
                     c.notes = n;

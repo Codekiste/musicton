@@ -729,7 +729,7 @@ pub static VELOCITY_PARAMS: LazyLock<Vec<ParamDef>> = LazyLock::new(|| {
 // ---------------------------------------------------------------------------------------------
 // More instruments
 
-pub mod simpler {
+pub mod smp {
     pub const MODE: usize = 0;
     pub const ROOT: usize = 1;
     pub const TRANSPOSE: usize = 2;
@@ -755,7 +755,7 @@ pub mod simpler {
     pub const BEATS: usize = 22;
 }
 
-pub static SIMPLER_PARAMS: LazyLock<Vec<ParamDef>> = LazyLock::new(|| {
+pub static SAMPLER_PARAMS: LazyLock<Vec<ParamDef>> = LazyLock::new(|| {
     vec![
         ParamDef::options("Mode", &["Classic", "One-Shot", "Slice"], 0),
         ParamDef::new("Root", 0.0, 127.0, 60.0, Unit::Note).step(1.0),
@@ -786,7 +786,7 @@ pub static SIMPLER_PARAMS: LazyLock<Vec<ParamDef>> = LazyLock::new(|| {
 pub const OP_PARAMS: usize = 7;
 pub const OPERATOR_ALGOS: &[&str] = &["1 Stack", "2 Y", "3 Pairs", "4 Branch", "5 Fan", "6 Organ+1", "7 Additive", "8 Comb"];
 
-pub mod operator {
+pub mod fmop {
     pub const ALGO: usize = 28;
     pub const FEEDBACK: usize = 29;
     pub const CUTOFF: usize = 30;
@@ -989,5 +989,12 @@ pub static NEXA_PARAMS: LazyLock<Vec<ParamDef>> = LazyLock::new(|| {
         ParamDef::new("Low", -12.0, 12.0, 0.0, Unit::Db),
         ParamDef::new("High", -12.0, 12.0, 0.0, Unit::Db),
         ParamDef::new("Mod Wheel", 0.0, 1.0, 0.0, Unit::Pct),
+    ]
+});
+
+pub static RACK_PARAMS: LazyLock<Vec<ParamDef>> = LazyLock::new(|| {
+    vec![
+        ParamDef::new("Dry/Wet", 0.0, 1.0, 1.0, Unit::Pct),
+        ParamDef::new("Output", -24.0, 12.0, 0.0, Unit::Db),
     ]
 });

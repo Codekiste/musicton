@@ -68,7 +68,7 @@ fn note(step: u32, len: u32, pitch: u8, vel: u8) -> Note {
 }
 
 fn drum_hit(lane: usize, tune: f32, decay: f32, tone: f32, drive: f32) -> Vec<f32> {
-    let mut inst = presets::preset("909 Punch").build();
+    let mut inst = presets::preset("Punch Kit").build();
     inst.params[0] = drive;
     inst.params[lane_param(lane, LANE_TUNE)] = tune;
     inst.params[lane_param(lane, LANE_DECAY)] = decay;
@@ -93,7 +93,7 @@ pub fn build_core_library(root: &Path) -> std::io::Result<usize> {
     };
 
     // One-shot drums.
-    let kicks = [("Kick 909", 0.0, 1.0, 0.5, 0.15), ("Kick Deep", -3.0, 1.6, 0.3, 0.1), ("Kick Punch", 1.0, 0.8, 0.8, 0.3), ("Kick Hard", -1.0, 1.3, 0.9, 0.7), ("Kick Short", 2.0, 0.5, 0.6, 0.2), ("Kick Rumble", -5.0, 2.4, 0.4, 0.5)];
+    let kicks = [("Kick Classic", 0.0, 1.0, 0.5, 0.15), ("Kick Deep", -3.0, 1.6, 0.3, 0.1), ("Kick Punch", 1.0, 0.8, 0.8, 0.3), ("Kick Hard", -1.0, 1.3, 0.9, 0.7), ("Kick Short", 2.0, 0.5, 0.6, 0.2), ("Kick Rumble", -5.0, 2.4, 0.4, 0.5)];
     for (name, tune, decay, tone, drive) in kicks {
         save(&format!("Drums/Kicks/{name}.wav"), drum_hit(0, tune, decay, tone, drive), true)?;
     }
@@ -122,15 +122,15 @@ pub fn build_core_library(root: &Path) -> std::io::Result<usize> {
         for r in 0..reps {
             notes.extend(clip.notes.iter().map(|n| Note { step: n.step + r * clip.len, ..*n }));
         }
-        let inst = presets::preset("909 Punch").build();
+        let inst = presets::preset("Punch Kit").build();
         let data = render(one_track(inst, notes, 2, vec![], 0.0), 2.0 * 4.0 * 60.0 / BPM);
         save(&format!("Loops/Drums/{} 130bpm.wav", pat.name), data, false)?;
     }
 
     // Bass and synth loops.
     for (pat_name, preset, folder) in [
-        ("Acid Line 1", "TB Acid", "Bass"),
-        ("Acid Line 2", "TB Acid", "Bass"),
+        ("Acid Line 1", "Classic Acid", "Bass"),
+        ("Acid Line 2", "Classic Acid", "Bass"),
         ("Rolling 16ths", "Rolling Sub", "Bass"),
         ("Offbeat Bass", "Rolling Sub", "Bass"),
         ("Hypnotic 3-Step", "Square Acid", "Bass"),
@@ -161,7 +161,7 @@ pub fn build_core_library(root: &Path) -> std::io::Result<usize> {
         ("Pluck A", "Pluck", vec![57]),
         ("Pad Am", "Warehouse Pad", vec![57, 60, 64]),
         ("Bass A", "Rolling Sub", vec![33]),
-        ("Acid A", "TB Acid", vec![45]),
+        ("Acid A", "Classic Acid", vec![45]),
         ("String A", "Plucked String", vec![45]),
     ] {
         let notes = pitches.iter().map(|&p| note(0, if name.starts_with("Pad") { 32 } else { 2 }, p, 110)).collect();

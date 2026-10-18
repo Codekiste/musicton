@@ -50,15 +50,26 @@ Audio läuft über ALSA bzw. PipeWire/PulseAudio (Standardgerät). Ein angeschlo
 - Editor Panel: Clip Editor (Step-Sequencer, Piano Roll mit Velocity-, Accent- und Slide-Lane, Audio-Clip-Editor) und Device Chain (Kette aus Macros, MIDI-Effekten, Instrument und Audio-Effekten)
 - Browser mit Kategorien und Suche, Help Panel (Hover-Hilfe zu jedem Element)
 
-**Instrumente:** B-303 Bassline (Acid-Bassline: Diodenkaskaden-artiges Filter, Accent-Sweep, Slide, interner Sequencer mit 8 Patterns, Shuffle, Scale, 5 Play-Modes, Drive- und Delay-Sektion, eigenes Plugin-Fenster) · Nexa (Preset-Rompler: 53 Presets in 10 Kategorien, bis zu 4 Layer, Macros, Arpeggiator, Trancegate, Effekte) · Drum Machine (10 Lanes, synthetisiert oder mit WAV pro Lane) · Acid Bass (303-Style mit Accent/Slide) · Poly Synth · Sampler (Classic/One-Shot/Slice, Tempo-Sync) · FM4 (4-Operator-FM, 8 Algorithmen) · Morph (Wavetable-Synth, 5 Tabellen, LFO/Env auf Position) · String Model (Karplus-Strong-Saite)
+**Instrumente:** B-303 Bassline (Acid-Bassline: Diodenkaskaden-artiges Filter, Accent-Sweep, Slide, interner Sequencer mit 8 Patterns, Shuffle, Scale, 5 Play-Modes, Drive- und Delay-Sektion, eigenes Plugin-Fenster) · Nexa (Preset-Rompler: 53 Presets in 10 Kategorien, bis zu 4 Layer, Macros, Arpeggiator, Trancegate, Effekte) · Drum Machine (10 Lanes, synthetisiert oder mit WAV pro Lane) · Acid Bass (mit Accent/Slide) · Poly Synth · Sampler (Classic/One-Shot/Slice, Tempo-Sync) · FM4 (4-Operator-FM, 8 Algorithmen) · Morph (Wavetable-Synth, 5 Tabellen, LFO/Env auf Position) · String Model (Karplus-Strong-Saite)
 
-**Audio-Effekte (36):** Filter Sweep, Pan LFO, Stutter, Channel EQ, Chorus, Compressor, Body Resonator, Drum Shaper, Tube Drive, Echo, Parametric EQ (mit Kurve), DJ EQ, Degrader, Triple Delay, Flanger, Frequency Shifter, Gate, Bus Compressor, Grain Delay, Limiter, Multiband Compressor (OTT-fähig), Overdrive, Pedal, Phaser, Ping Pong Delay, Bitcrusher, Chord Resonator, Reverb, Saturator, Sidechain, Stereo Delay, Spectrum, Tuner, Utility, Vinyl, Vocoder
+**Audio-Effekte (36):** Filter Sweep, Pan LFO, Stutter, Channel EQ, Chorus, Compressor, Body Resonator, Drum Shaper, Tube Drive, Echo, Parametric EQ (mit Kurve), DJ EQ, Degrader, Triple Delay, Flanger, Frequency Shifter, Gate, Bus Compressor, Grain Delay, Limiter, Multiband Compressor (Upward- und Downward-Kompression), Overdrive, Pedal, Phaser, Ping Pong Delay, Bitcrusher, Chord Resonator, Reverb, Saturator, Sidechain, Stereo Delay, Spectrum, Tuner, Utility, Vinyl, Vocoder
 
 **MIDI-Effekte:** Arpeggiator, Chord, Note Length, Pitch, Random, Scale, Velocity
 
 **Audio:** Audiospuren mit Warp-Modi Beats (Time-Stretch), Re-Pitch und Off, automatische Tempo-Erkennung von Loops, Audio-Aufnahme vom Eingang (Spur scharf schalten ● + Record)
 
 **Plugin-Fenster:** B-303 und Nexa erscheinen in der Device-Kette als kompakter Plugin-Device mit den wichtigsten Parametern. Der 🔧-Button (oder Doppelklick auf den Titel) öffnet den Editor in einem eigenen Fenster, Ctrl+Alt+P blendet alle Plugin-Fenster ein/aus. Neue B-303/Nexa-Spuren öffnen ihr Fenster automatisch.
+
+**Arrangement-Workflow:**
+- Arranger-Spur: Song-Abschnitte (Intro, Build, Drop …) über der Timeline. Verschieben, Duplizieren und Löschen nimmt Clips und Automation mit.
+- Section Chain: Abschnitte in frei wählbarer Reihenfolge abspielen, Wiederholungen eingeschlossen.
+- Marker: benannte Sprungpunkte auf der Timeline.
+- Playlist: Szenen als Pattern-Blöcke auf 8 freien Bahnen anordnen. Wo eine Spur keinen Timeline-Clip hat, spielt die Timeline die Clips des Blocks.
+- Clip Gain: Pegel pro Clip, vor der Device-Kette.
+- Modulatoren pro Spur: LFO mit Sinus, Dreieck, Sägezahn, Rechteck oder Zufall, taktsynchron oder in Hz, dazu eine Hüllkurve, die bei jeder Note neu startet. Jeder Modulator wirkt auf einen beliebigen Parameter.
+- Rack: parallele Effektketten mit Volume, Pan und Mute pro Kette, dazu Dry/Wet und Output.
+- Freies Routing: Jede Spur kann in den Master, einen Return oder eine beliebige andere Spur ausgeben (Busse, Resampling). Rückkopplungen werden automatisch abgefangen.
+- Sidechain: Compressor, Bus Compressor, Gate und Sidechain lassen sich von jeder anderen Spur steuern.
 
 **Live-Performance:** Clip- und Szenen-Launch mit globaler Quantisierung · Next Actions · Gruppenspuren (Ctrl+G) · Rack-Macros · Crossfader · MIDI-Learn und Tastatur-Mapping für jeden Regler, Clip und jede Szene (Rechtsklick) · Timeline Record (Launcher-Performance auf die Timeline aufnehmen) · Recall MIDI · Launcher Record · Back to Timeline · Tap Tempo, Swing, Metronom
 
@@ -99,10 +110,11 @@ Netzwerk-Tempo-Sync, Audio-to-MIDI, Sampler-Multisampling, Clip-Hüllkurven und 
 
 Musicton öffnet beim Start einen lokalen Steuer-Port (`127.0.0.1:47800`, nur lokal erreichbar; abschalten mit `MUSICTON_NO_REMOTE=1`, anderer Port mit `MUSICTON_PORT`). Der MCP-Server `musicton-mcp` übersetzt MCP-Tool-Aufrufe darauf. Claude Code findet ihn über die `.mcp.json` im Projektordner.
 
-Die 46 Tools decken ab:
+Die 52 Tools decken ab:
 - **Zustand:** Projekt, Spuren, Clips mit Noten, Devices mit allen Parametern, Meter
 - **Transport und Launch:** Abspielen, Stoppen, Clips und Szenen starten
 - **Bearbeiten:** Spuren, Clips, Noten, Devices, Parameter, Automation, Timeline
+- **Arrangement:** Abschnitte, Marker, Section Chain, Playlist, Routing, Sidechain, Racks, Modulatoren
 - **Messen:** Offline-Rendern mit Pegelanalyse (Peak, RMS, Clipping, Bass/Mitten/Höhen-Verteilung)
 - **Oberfläche:** Screenshots und Maus-/Tastatur-Eingaben
 

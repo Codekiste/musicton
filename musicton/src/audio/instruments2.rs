@@ -3,7 +3,7 @@
 use super::dsp::*;
 use super::instruments::InstrumentDsp;
 use super::samples::{self, Sample};
-use crate::params::{self, operator, simpler, tension, wavetable, OP_PARAMS};
+use crate::params::{self, fmop, smp, tension, wavetable, OP_PARAMS};
 use std::f32::consts::TAU;
 use std::sync::{Arc, LazyLock};
 
@@ -56,7 +56,7 @@ impl Sampler {
     pub fn new(sr: f32) -> Self {
         Self {
             sr,
-            p: params::defaults(&params::SIMPLER_PARAMS),
+            p: params::defaults(&params::SAMPLER_PARAMS),
             sample: None,
             path: None,
             voices: (0..16).map(|_| SVoice::default()).collect(),
@@ -76,7 +76,7 @@ impl InstrumentDsp for Sampler {
             self.sample = path.as_deref().and_then(samples::try_get);
             self.path = path;
         }
-        let (a, d, s, r) = (p[simpler::ATTACK], p[simpler::DECAY], p[simpler::SUSTAIN], p[simpler::RELEASE]);
+        let (a, d, s, r) = (p[smp::ATTACK], p[smp::DECAY], p[smp::SUSTAIN], p[smp::RELEASE]);
         for v in &mut self.voices {
             v.amp.set(a, d, s, r, self.sr);
         }
@@ -93,14 +93,14 @@ impl InstrumentDsp for Sampler {
         if len < 2.0 {
             return;
         }
-        let mode = p[simpler::MODE].round() as i32;
-        let (mut start, mut end) = ((p[simpler::START] as f64 * len), (p[simpler::END] as f64 * len));
+        let mode = p[smp::MODE].round() as i32;
+        let (mut start, mut end) = ((p[smp::START] as f64 * len), (p[smp::END] as f64 * len));
         if end <= start + 16.0 {
             end = (start + 16.0).min(len);
         }
-        let mut semis = p[simpler::TRANSPOSE] + p[simpler::DETUNE] / 100.0;
+        let mut semis = p[smp::TRANSPOSE] + p[smp::DETUNE] / 100.0;
         if mode == 2 {
-            let n = p[simpler::SLICES].round().max(1.0) as i32;
+            let n = p[smp::SLICES].round().max(1.0) as i32;
             let idx = pitch as i32 - 36;
             if idx < 0 || idx >= n {
                 return;
@@ -109,20 +109,20 @@ impl InstrumentDsp for Sampler {
             start += slice * idx as f64;
             end = start + slice;
         } else if mode == 0 {
-            semis += pitch as f32 - p[simpler::ROOT];
+            semis += pitch as f32 - p[smp::ROOT];
         }
         let mut rate = (s.sample_rate / self.sr) as f64 * 2f64.powf(semis as f64 / 12.0);
-        if p[simpler::WARP] > 0.5 {
+        if p[smp::WARP] > 0.5 {
             // Sync: repitch so the whole region lasts `Beats` at the song tempo.
-            let region_secs = (p[simpler::END] - p[simpler::START]).max(0.01) as f64 * len / s.sample_rate as f64;
-            let target_secs = p[simpler::BEATS] as f64 * 60.0 / self.bpm as f64;
+            let region_secs = (p[smp::END] - p[smp::START]).max(0.01) as f64 * len / s.sample_rate as f64;
+            let target_secs = p[smp::BEATS] as f64 * 60.0 / self.bpm as f64;
             rate *= region_secs / target_secs;
         }
         self.age += 1;
-        let limit = p[simpler::VOICES].round() as usize;
+        let limit = p[smp::VOICES].round() as usize;
         let mono = limit <= 1;
         let idx = pick_voice(&self.voices, |v| v.active, |v| v.amp.is_released(), |v| v.age, limit);
-        let glide = p[simpler::GLIDE];
+        let glide = p[smp::GLIDE];
         let v = &mut self.voices[idx];
         let legato = mono && v.active && glide > 0.0;
         v.target_rate = rate;
@@ -138,11 +138,11 @@ impl InstrumentDsp for Sampler {
         v.pitch = pitch;
         v.start = start;
         v.end = end;
-        v.looping = mode == 0 && p[simpler::LOOP] > 0.5;
+        v.looping = mode == 0 && p[smp::LOOP] > 0.5;
         v.one_shot = mode != 0;
         v.gate = gate;
         v.held = gate.is_none();
-        v.vel = 1.0 - p[simpler::VEL] * (1.0 - vel as f32 / 127.0);
+        v.vel = 1.0 - p[smp::VEL] * (1.0 - vel as f32 / 127.0);
         v.age = self.age;
     }
 
@@ -165,16 +165,16 @@ impl InstrumentDsp for Sampler {
         let Some(s) = self.sample.clone() else { return };
         let p = &self.p;
         let sr = self.sr;
-        let mode = match p[simpler::FTYPE].round() as i32 {
+        let mode = match p[smp::FTYPE].round() as i32 {
             1 => FilterMode::High,
             2 => FilterMode::Band,
             _ => FilterMode::Low,
         };
-        let filter_on = !(mode == FilterMode::Low && p[simpler::CUTOFF] >= 19500.0 && p[simpler::FENV].abs() < 0.01);
-        let q = res_to_q(p[simpler::RES]);
-        let vol = p[simpler::VOLUME];
-        let (pl, pr) = pan_gains(p[simpler::PAN]);
-        let glide = one_pole_coef(p[simpler::GLIDE].max(0.0001) / 3.0, sr) as f64;
+        let filter_on = !(mode == FilterMode::Low && p[smp::CUTOFF] >= 19500.0 && p[smp::FENV].abs() < 0.01);
+        let q = res_to_q(p[smp::RES]);
+        let vol = p[smp::VOLUME];
+        let (pl, pr) = pan_gains(p[smp::PAN]);
+        let glide = one_pole_coef(p[smp::GLIDE].max(0.0001) / 3.0, sr) as f64;
         let len = s.left.len();
         for v in self.voices.iter_mut().filter(|v| v.active) {
             for i in 0..l.len() {
@@ -205,7 +205,7 @@ impl InstrumentDsp for Sampler {
                 let env = v.amp.next();
                 if filter_on {
                     if i % 16 == 0 {
-                        let fc = (p[simpler::CUTOFF] * 2f32.powf(p[simpler::FENV] * env * 6.0)).clamp(20.0, 20000.0);
+                        let fc = (p[smp::CUTOFF] * 2f32.powf(p[smp::FENV] * env * 6.0)).clamp(20.0, 20000.0);
                         v.fl.set(fc, q, sr);
                         v.fr.set(fc, q, sr);
                     }
@@ -293,7 +293,7 @@ impl InstrumentDsp for Fm4 {
     fn note_on(&mut self, pitch: u8, vel: u8, gate: Option<u32>, _slide: bool) {
         self.age += 1;
         let idx = pick_voice(&self.voices, |v| v.active, |v| v.env[0].is_released(), |v| v.age, 12);
-        let spread = self.p[operator::SPREAD];
+        let spread = self.p[fmop::SPREAD];
         let v = &mut self.voices[idx];
         v.active = true;
         v.pitch = pitch;
@@ -330,12 +330,12 @@ impl InstrumentDsp for Fm4 {
     fn render(&mut self, l: &mut [f32], r: &mut [f32]) {
         let p = &self.p;
         let sr = self.sr;
-        let (mods, carriers) = ALGOS[(p[operator::ALGO].round() as usize).min(7)];
+        let (mods, carriers) = ALGOS[(p[fmop::ALGO].round() as usize).min(7)];
         let ncar = carriers.iter().filter(|c| **c).count().max(1) as f32;
-        let fb = p[operator::FEEDBACK] * 2.5;
-        let filter_on = p[operator::CUTOFF] < 19500.0;
-        let q = res_to_q(p[operator::RES]);
-        let vol = p[operator::VOLUME] * 0.5;
+        let fb = p[fmop::FEEDBACK] * 2.5;
+        let filter_on = p[fmop::CUTOFF] < 19500.0;
+        let q = res_to_q(p[fmop::RES]);
+        let vol = p[fmop::VOLUME] * 0.5;
         let mut ratios = [1.0f32; 4];
         let mut levels = [0.0f32; 4];
         for k in 0..4 {
@@ -345,7 +345,7 @@ impl InstrumentDsp for Fm4 {
         }
         for v in self.voices.iter_mut().filter(|v| v.active) {
             if filter_on {
-                v.fl.set(p[operator::CUTOFF], q, sr);
+                v.fl.set(p[fmop::CUTOFF], q, sr);
             }
             let (pl, pr) = pan_gains(v.pan);
             for i in 0..l.len() {

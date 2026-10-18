@@ -1,6 +1,7 @@
 //! Timeline: timeline with clips, loop brace and automation lanes.
 
 use super::theme::*;
+use super::arranger::{ArrangerState, MARK_H, SEC_H};
 use super::widgets;
 use super::{App, ClipRef, Detail, Payload, Sel};
 use crate::audio::engine::Cmd;
@@ -30,11 +31,12 @@ pub struct ArrState {
     drag: Option<ArrDrag>,
     pub targets: HashMap<u64, AutoTarget>,
     pub follow: bool,
+    pub ext: ArrangerState,
 }
 
 impl Default for ArrState {
     fn default() -> Self {
-        Self { pps: 4.0, scroll_x: 0.0, scroll_y: 0.0, drag: None, targets: HashMap::new(), follow: true }
+        Self { pps: 4.0, scroll_x: 0.0, scroll_y: 0.0, drag: None, targets: HashMap::new(), follow: true, ext: ArrangerState::default() }
     }
 }
 
@@ -80,7 +82,7 @@ fn base_norm(t: &Track, target: AutoTarget) -> f32 {
 }
 
 impl App {
-    fn snap(&self, step: f32, alt: bool) -> u32 {
+    pub(super) fn snap(&self, step: f32, alt: bool) -> u32 {
         let grid = if alt {
             1.0
         } else if self.arr.pps < 2.5 {
@@ -91,7 +93,7 @@ impl App {
         ((step / grid).round() * grid).max(0.0) as u32
     }
 
-    fn snap_floor(&self, step: f32, alt: bool) -> u32 {
+    pub(super) fn snap_floor(&self, step: f32, alt: bool) -> u32 {
         let grid = if alt {
             1.0
         } else if self.arr.pps < 2.5 {
@@ -106,8 +108,11 @@ impl App {
         let full = ui.available_rect_before_wrap();
         ui.allocate_rect(full, Sense::hover());
         let ruler = Rect::from_min_max(pos2(full.left() + HEADER_W, full.top()), pos2(full.right(), full.top() + RULER_H));
-        let lanes = Rect::from_min_max(pos2(full.left() + HEADER_W, full.top() + RULER_H), full.max);
-        let headers = Rect::from_min_max(pos2(full.left(), full.top() + RULER_H), pos2(full.left() + HEADER_W, full.bottom()));
+        let top_h = RULER_H + MARK_H + SEC_H;
+        let marks = Rect::from_min_max(pos2(ruler.left(), ruler.bottom()), pos2(ruler.right(), ruler.bottom() + MARK_H));
+        let secs = Rect::from_min_max(pos2(ruler.left(), marks.bottom()), pos2(ruler.right(), marks.bottom() + SEC_H));
+        let lanes = Rect::from_min_max(pos2(full.left() + HEADER_W, full.top() + top_h), full.max);
+        let headers = Rect::from_min_max(pos2(full.left(), full.top() + top_h), pos2(full.left() + HEADER_W, full.bottom()));
         let pps = self.arr.pps;
         let x_of = |s: f32, sx: f32| lanes.left() + (s - sx) * pps;
 
@@ -178,6 +183,9 @@ impl App {
             lp.rect_filled(Rect::from_x_y_ranges(lx0..=lx1, lanes.y_range()), 0.0, Color32::from_rgba_unmultiplied(255, 176, 31, 10));
         }
 
+        if self.arr.ext.playlist {
+            rows.clear();
+        }
         // Lanes.
         for &(id, is_auto, y) in &rows {
             let row = Rect::from_min_size(pos2(lanes.left(), y), vec2(lanes.width(), if is_auto { AUTO_H } else { LANE_H }));
@@ -209,14 +217,19 @@ impl App {
                 }
             });
         }
-        if ids.is_empty() {
+        if self.arr.ext.playlist {
+            self.playlist_view(ui, lanes, headers, &x_of);
+        }
+        if ids.is_empty() && !self.arr.ext.playlist {
             p.text(lanes.center(), Align2::CENTER_CENTER, "Drop an instrument from the browser into the Launcher to create a track", FontId::proportional(13.0), TEXT_DIM);
         }
 
         // Ruler.
         self.ruler(ui, ruler, x_of);
+        self.marker_strip(ui, marks, &x_of);
+        self.section_lane(ui, secs, &x_of);
         // Corner with tools.
-        let corner = Rect::from_min_max(full.min, pos2(full.left() + HEADER_W, full.top() + RULER_H));
+        let corner = Rect::from_min_max(full.min, pos2(full.left() + HEADER_W, full.top() + top_h));
         p.rect_filled(corner, 0.0, PANEL);
         ui.scope_builder(UiBuilder::new().max_rect(corner.shrink(4.0)), |ui| {
             ui.horizontal(|ui| {
@@ -241,6 +254,8 @@ impl App {
                 }
                 self.hint(&r, "Copy Scenes to Timeline", "Appends all non-empty scenes one after another to the end of the arrangement (at least 8 bars each).");
             });
+            ui.add_space(4.0);
+            self.arranger_tools(ui);
         });
 
         // Playhead and start marker.

@@ -33,6 +33,7 @@ impl App {
                     ui.horizontal_top(|ui| {
                         if let Sel::Track(id) = sel {
                             self.macro_panel(ui, id);
+                            self.modulator_panel(ui, id);
                             let n_mfx = self.project.track(id).map(|t| t.midi_fx.len()).unwrap_or(0);
                             for i in 0..n_mfx {
                                 self.midi_fx_panel(ui, id, i);
@@ -379,7 +380,7 @@ impl App {
     }
 
     fn simpler_sample_view(&mut self, ui: &mut egui::Ui, track: u64, inst: &mut Instrument) {
-        use params::simpler;
+        use params::smp;
         let path = inst.samples.first().cloned().flatten();
         let (rect, resp) = ui.allocate_exact_size(vec2(520.0, 58.0), Sense::click());
         let p = ui.painter_at(rect);
@@ -392,12 +393,12 @@ impl App {
                     let x = rect.left() + i as f32;
                     p.line_segment([egui::pos2(x, mid - hi * rect.height() * 0.48), egui::pos2(x, mid - lo * rect.height() * 0.48)], egui::Stroke::new(1.0_f32, BLUE));
                 }
-                let sx = rect.left() + inst.params[simpler::START] * rect.width();
-                let ex = rect.left() + inst.params[simpler::END] * rect.width();
+                let sx = rect.left() + inst.params[smp::START] * rect.width();
+                let ex = rect.left() + inst.params[smp::END] * rect.width();
                 p.rect_filled(egui::Rect::from_min_max(rect.min, egui::pos2(sx, rect.bottom())), 0.0, egui::Color32::from_black_alpha(140));
                 p.rect_filled(egui::Rect::from_min_max(egui::pos2(ex, rect.top()), rect.max), 0.0, egui::Color32::from_black_alpha(140));
-                if inst.params[simpler::MODE].round() as i32 == 2 {
-                    let n = inst.params[simpler::SLICES].round().max(1.0) as usize;
+                if inst.params[smp::MODE].round() as i32 == 2 {
+                    let n = inst.params[smp::SLICES].round().max(1.0) as usize;
                     for k in 0..n {
                         let x = sx + (ex - sx) * k as f32 / n as f32;
                         p.line_segment([egui::pos2(x, rect.top()), egui::pos2(x, rect.bottom())], egui::Stroke::new(1.0_f32, ACCENT));
@@ -460,7 +461,7 @@ impl App {
         arc
     }
 
-    fn param_hint(&mut self, r: &egui::Response, def: &params::ParamDef, info: &str) {
+    pub(super) fn param_hint(&mut self, r: &egui::Response, def: &params::ParamDef, info: &str) {
         if r.hovered() || r.dragged() {
             self.info = Some((
                 def.name.to_string(),
@@ -476,6 +477,8 @@ impl App {
         let reduction = self.status.reductions.iter().find(|(id, _)| *id == d.id).map(|(_, r)| *r);
         let selected = self.sel_device == Some(d.id);
         let mut action: Option<i32> = None;
+        let mut dirty = false;
+        let own_track = if let Sel::Track(t) = sel { Some(t) } else { None };
         let resp = Self::panel_frame(ui, selected, |ui| {
             ui.set_min_height(200.0);
             ui.horizontal(|ui| {
@@ -499,6 +502,9 @@ impl App {
                 if ui.small_button("×").on_hover_text("Delete device").clicked() {
                     action = Some(0);
                 }
+                if d.kind.has_sidechain() {
+                    dirty |= self.sidechain_combo(ui, &mut d, own_track);
+                }
             });
             let rows = if defs.len() > 10 { 3 } else { 2 };
             let cols = defs.len().div_ceil(rows).max(1);
@@ -507,6 +513,7 @@ impl App {
                     DeviceKind::Eq8 => self.eq8_ui(ui, &mut d),
                     DeviceKind::Analyzer => self.spectrum_ui(ui, &mut d),
                     DeviceKind::Tuner => self.tuner_ui(ui, &mut d),
+                    DeviceKind::Rack => dirty |= self.rack_ui(ui, &mut d),
                     _ => {
                         ui.vertical(|ui| {
                             for row in 0..rows {
@@ -558,7 +565,7 @@ impl App {
                 self.touch();
             }
             _ => {
-                if d.on != dev.on || d.params != dev.params {
+                if dirty || d.on != dev.on || d.params != dev.params {
                     ch.devices[i] = d;
                     self.touch();
                 }

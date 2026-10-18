@@ -6,6 +6,8 @@ mod params;
 mod presets;
 mod remote;
 mod ui;
+#[cfg(test)]
+mod tests_workflow;
 
 fn main() -> eframe::Result {
     // `--x11` runs through XWayland: Wayland compositors pause hidden windows, which would also

@@ -7,6 +7,7 @@ use super::instruments::{self, InstrumentDsp};
 use super::midifx::{self, Ev, FxCtx, MidiFxDsp};
 use super::Shared;
 use crate::model::*;
+use crate::params;
 use crossbeam_channel::Receiver;
 use std::sync::Arc;
 use std::time::Instant;
@@ -61,6 +62,10 @@ struct DevDsp {
     fx: Box<dyn Effect>,
     applied: Vec<f32>,
     scratch: Vec<f32>,
+    /// Sidechain source track.
+    sc: Option<u64>,
+    /// Parallel chains of a Rack device.
+    chains: Vec<ChannelDsp>,
 }
 
 impl DevDsp {
@@ -114,15 +119,25 @@ impl ChannelDsp {
                     fx: effects::create(d.kind, sr),
                     applied: vec![],
                     scratch: vec![],
+                    sc: None,
+                    chains: vec![],
                 },
             };
             dd.on = d.on;
+            dd.sc = d.sc_source;
+            if d.kind == DeviceKind::Rack {
+                dd.chains.resize_with(d.chains.len(), || ChannelDsp::new(sr));
+                for (cd, c) in dd.chains.iter_mut().zip(&d.chains) {
+                    cd.sync_devices(&c.devices, sr);
+                    cd.set_mix(c.volume, c.pan, [0.0; 2], c.mute);
+                    cd.settle();
+                }
+            }
             self.devices.push(dd);
         }
     }
 
-    fn set_mix(&mut self, ch: &Channel, vol: f32, pan: f32, sends: [f32; 2], muted: bool) {
-        let _ = ch;
+    fn set_mix(&mut self, vol: f32, pan: f32, sends: [f32; 2], muted: bool) {
         self.gain.target = fader_to_gain(vol);
         let (l, r) = pan_gains(pan);
         self.pan_l.target = l;
@@ -145,6 +160,10 @@ impl ChannelDsp {
 
     fn process_devices(&mut self, n: usize, ctx: &Ctx) {
         for d in self.devices.iter_mut().filter(|d| d.on) {
+            if d.kind == DeviceKind::Rack {
+                process_rack(d, &mut self.l[..n], &mut self.r[..n], ctx);
+                continue;
+            }
             d.fx.process(&mut self.l[..n], &mut self.r[..n], ctx);
         }
         // Safety net for live use: a misbehaving device must never take down the whole mix.
@@ -174,6 +193,46 @@ impl ChannelDsp {
     }
 }
 
+/// Runs the input through every chain of a rack in parallel and sums the results.
+fn process_rack(d: &mut DevDsp, l: &mut [f32], r: &mut [f32], ctx: &Ctx) {
+    let n = l.len();
+    let wet = d.applied.first().copied().unwrap_or(1.0).clamp(0.0, 1.0);
+    let out = db_to_gain(d.applied.get(1).copied().unwrap_or(0.0));
+    let mut sl = [0.0f32; MAX_BLOCK];
+    let mut sr = [0.0f32; MAX_BLOCK];
+    for c in &mut d.chains {
+        c.l[..n].copy_from_slice(l);
+        c.r[..n].copy_from_slice(r);
+        c.process_devices(n, ctx);
+        c.output(n, &mut sl, &mut sr, None);
+        c.meter = [0.0; 2];
+    }
+    if d.chains.is_empty() {
+        sl[..n].copy_from_slice(l);
+        sr[..n].copy_from_slice(r);
+    }
+    for i in 0..n {
+        l[i] = (l[i] * (1.0 - wet) + sl[i] * wet) * out;
+        r[i] = (r[i] * (1.0 - wet) + sr[i] * wet) * out;
+    }
+}
+
+/// Where a track's signal goes after its fader.
+#[derive(Clone, Copy, PartialEq, Debug)]
+enum Dest {
+    Master,
+    Track(usize),
+    Return(usize),
+}
+
+#[derive(Clone, Copy, Default)]
+struct ModState {
+    phase: f32,
+    env: f32,
+    stage: u8,
+    rnd: f32,
+}
+
 struct MfxDsp {
     id: u64,
     kind: MidiFxKind,
@@ -183,8 +242,12 @@ struct MfxDsp {
 }
 
 struct TrackDsp {
-    /// Index of the group track this track feeds (instead of the master).
-    group_idx: Option<usize>,
+    /// Destination after the fader (group, any other track, a return or the master).
+    dest: Dest,
+    clip_gain: Smooth,
+    mods: Vec<ModState>,
+    mod_vals: Vec<(AutoTarget, f32)>,
+    mod_trigger: bool,
     gin: [[f32; MAX_BLOCK]; 2],
     mfx: Vec<MfxDsp>,
     live_map: Vec<(u8, Vec<u8>)>,
@@ -231,12 +294,19 @@ impl TrackDsp {
         for e in &evs {
             self.inst.note_on(e.pitch, e.vel, e.gate, e.slide);
         }
+        if !evs.is_empty() {
+            self.mod_trigger = true;
+        }
         evs
     }
 
     fn new(t: &Track, sr: f32) -> Self {
         Self {
-            group_idx: None,
+            dest: Dest::Master,
+            clip_gain: Smooth::new(1.0, 0.01, sr),
+            mods: vec![],
+            mod_vals: vec![],
+            mod_trigger: false,
             gin: [[0.0; MAX_BLOCK]; 2],
             mfx: vec![],
             live_map: vec![],
@@ -283,6 +353,9 @@ pub struct Engine {
     cpu: f32,
     reductions: Vec<(u64, f32)>,
     rng: u32,
+    /// Processing order: sources before the tracks they feed.
+    order: Vec<usize>,
+    chain_idx: usize,
 }
 
 impl Engine {
@@ -307,6 +380,8 @@ impl Engine {
             cpu: 0.0,
             reductions: Vec::with_capacity(64),
             rng: 0x1234_5678,
+            order: vec![],
+            chain_idx: 0,
         };
         e.sync(project);
         e
@@ -357,8 +432,17 @@ impl Engine {
             self.tracks.push(td);
         }
         for (ti, t) in p.tracks.iter().enumerate() {
-            self.tracks[ti].group_idx = t.group.and_then(|g| p.tracks.iter().position(|x| x.id == g && x.instrument.kind == InstrumentKind::Group));
+            let group = t.group.and_then(|g| p.tracks.iter().position(|x| x.id == g && x.instrument.kind == InstrumentKind::Group));
+            let dest = match t.output {
+                Output::Track(id) => p.tracks.iter().position(|x| x.id == id).filter(|&i| i != ti).map(Dest::Track),
+                Output::Return(k) if (k as usize) < p.returns.len().min(2) => Some(Dest::Return(k as usize)),
+                _ => None,
+            };
+            let td = &mut self.tracks[ti];
+            td.dest = dest.or(group.map(Dest::Track)).unwrap_or(Dest::Master);
+            td.mods.resize_with(t.modulators.len(), ModState::default);
         }
+        self.order = route_order(&mut self.tracks);
         while self.returns.len() < p.returns.len() {
             self.returns.push(ChannelDsp::new(sr));
         }
@@ -374,15 +458,71 @@ impl Engine {
         let ctx = self.ctx();
         let p = self.project.clone();
         for (rd, rt) in self.returns.iter_mut().zip(&p.returns) {
-            apply_devices(rd, &rt.channel.devices, &[], &ctx, true);
+            apply_devices(rd, &rt.channel.devices, &[], &[], &ctx, true);
             let c = &rt.channel;
-            rd.set_mix(c, c.volume, c.pan, [0.0; 2], c.mute);
+            rd.set_mix(c.volume, c.pan, [0.0; 2], c.mute);
             rd.settle();
         }
-        apply_devices(&mut self.master, &p.master.devices, &[], &ctx, true);
+        apply_devices(&mut self.master, &p.master.devices, &[], &[], &ctx, true);
         let m = &p.master;
-        self.master.set_mix(m, m.volume, 0.0, [0.0; 2], false);
+        self.master.set_mix(m.volume, 0.0, [0.0; 2], false);
         self.master.settle();
+    }
+
+    /// Advances the track modulators by one block and pushes the new values if any are active.
+    fn run_modulators(&mut self, n: usize) {
+        let p = self.project.clone();
+        let beat_hz = p.bpm.clamp(20.0, 999.0) / 60.0;
+        for ti in 0..self.tracks.len() {
+            let t = &p.tracks[ti];
+            let td = &mut self.tracks[ti];
+            let trig = std::mem::take(&mut td.mod_trigger);
+            if t.modulators.is_empty() {
+                if !td.mod_vals.is_empty() {
+                    td.mod_vals.clear();
+                    self.apply_track(ti, false);
+                }
+                continue;
+            }
+            td.mod_vals.clear();
+            let dt = n as f32 / self.sr;
+            for (m, st) in t.modulators.iter().zip(td.mods.iter_mut()) {
+                let hz = if m.synced { beat_hz / params::division_beats(m.rate) } else { m.rate.max(0.001) };
+                let prev = st.phase;
+                st.phase = (st.phase + hz * dt).fract();
+                if st.phase < prev {
+                    self.rng = self.rng.wrapping_mul(1664525).wrapping_add(1013904223);
+                    st.rnd = (self.rng >> 8) as f32 / (1u32 << 23) as f32 - 1.0;
+                }
+                if trig {
+                    st.stage = 1;
+                }
+                let v = match m.shape {
+                    ModShape::Sine => (st.phase * std::f32::consts::TAU).sin(),
+                    ModShape::Triangle => 1.0 - 4.0 * (st.phase - 0.5).abs(),
+                    ModShape::Saw => st.phase * 2.0 - 1.0,
+                    ModShape::Square => if st.phase < 0.5 { 1.0 } else { -1.0 },
+                    ModShape::Random => st.rnd,
+                    ModShape::Envelope => {
+                        match st.stage {
+                            1 => {
+                                st.env += dt / m.attack.max(0.001);
+                                if st.env >= 1.0 {
+                                    st.env = 1.0;
+                                    st.stage = 2;
+                                }
+                            }
+                            _ => st.env *= (-dt / m.decay.max(0.001) * 4.0).exp(),
+                        }
+                        st.env
+                    }
+                };
+                if let (true, Some(target)) = (m.on, m.target) {
+                    td.mod_vals.push((target, v * m.depth * 0.5));
+                }
+            }
+            self.apply_track(ti, false);
+        }
     }
 
     fn apply_track(&mut self, ti: usize, force: bool) {
@@ -404,6 +544,17 @@ impl Engine {
                 _ => {}
             }
         }
+        for &(target, off) in &td.mod_vals {
+            match target {
+                AutoTarget::Instrument(i) if i < defs.len() => {
+                    td.inst_scratch[i] = defs[i].from_norm((defs[i].to_norm(td.inst_scratch[i]) + off).clamp(0.0, 1.0))
+                }
+                AutoTarget::Volume => vol = (vol + off).clamp(0.0, 1.0),
+                AutoTarget::Pan => pan = (pan + off * 2.0).clamp(-1.0, 1.0),
+                AutoTarget::Send(k) => sends[(k as usize).min(1)] = (sends[(k as usize).min(1)] + off).clamp(0.0, 1.0),
+                _ => {}
+            }
+        }
         td.inst.set_tempo(p.bpm.clamp(20.0, 999.0));
         if force {
             td.inst.set_extra(&t.instrument);
@@ -412,7 +563,7 @@ impl Engine {
             td.inst.set_params(&td.inst_scratch, &t.instrument.samples);
             td.inst_applied.clone_from(&td.inst_scratch);
         }
-        apply_devices(&mut td.ch, &t.channel.devices, &td.auto_vals, &ctx, force);
+        apply_devices(&mut td.ch, &t.channel.devices, &td.auto_vals, &td.mod_vals, &ctx, force);
         let muted = t.channel.mute || (any_solo && !p.solo_ok(t));
         let xf = p.crossfader.clamp(-1.0, 1.0);
         let xgain = match t.channel.xfade {
@@ -420,7 +571,7 @@ impl Engine {
             2 => if xf >= 0.0 { 1.0 } else { (-xf * std::f32::consts::FRAC_PI_2).cos() },
             _ => 1.0,
         };
-        td.ch.set_mix(&t.channel, vol, pan, sends, muted);
+        td.ch.set_mix(vol, pan, sends, muted);
         td.ch.gain.target *= xgain;
         td.ch.settle();
     }
@@ -533,6 +684,22 @@ impl Engine {
             self.tick = 0;
             self.arr_pos = self.start_marker;
             self.samples_to_step = 0.0;
+            self.chain_idx = 0;
+            let p = self.project.clone();
+            if p.chain_on && !p.chain.is_empty() {
+                let secs: Vec<&Section> = p.chain.iter().filter_map(|id| p.sections.iter().find(|s| s.id == *id)).collect();
+                // From the song start the chain begins at its first entry; a start marker set
+                // inside a chained section starts there.
+                let inside = if self.arr_pos == 0 { None } else { secs.iter().position(|s| self.arr_pos >= s.start && self.arr_pos < s.start + s.len) };
+                match inside {
+                    Some(i) => self.chain_idx = i,
+                    None => {
+                        if let Some(s) = secs.first() {
+                            self.arr_pos = s.start;
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -640,14 +807,27 @@ impl Engine {
                 let found = t.arrangement.iter().find(|ac| arr >= ac.start && arr < ac.start + ac.len);
                 let prev = td.arr_clip;
                 td.arr_clip = found.map(|ac| ac.id);
-                if prev.is_some() && prev != td.arr_clip {
-                    td.inst.all_off();
-                }
                 if let Some(ac) = found {
                     if ac.clip.len > 0 {
                         clip_and_local = Some((&ac.clip, (arr - ac.start) % ac.clip.len));
                     }
+                } else {
+                    // Playlist: a block plays the clips of its scene where the timeline is empty.
+                    let block = p.playlist.iter().find(|b| {
+                        arr >= b.start && arr < b.start + b.len && t.clips.get(b.scene).is_some_and(|c| c.as_ref().is_some_and(|c| c.len > 0))
+                    });
+                    if let Some(b) = block {
+                        let c = t.clips[b.scene].as_ref().unwrap();
+                        td.arr_clip = Some(u64::MAX - b.id);
+                        clip_and_local = Some((c, (arr - b.start) % c.len));
+                    }
                 }
+                if prev.is_some() && prev != td.arr_clip {
+                    td.inst.all_off();
+                }
+            }
+            if let Some((c, _)) = clip_and_local {
+                td.clip_gain.target = db_to_gain(c.gain.clamp(-60.0, 24.0));
             }
             if td.kind == InstrumentKind::Audio {
                 td.inst.audio_sync(clip_and_local.and_then(|(c, local)| c.audio.as_ref().map(|a| (a, local as f64 / 4.0))));
@@ -696,6 +876,19 @@ impl Engine {
         self.dispatch_kicks();
         self.tick += 1;
         self.arr_pos += 1;
+        // Arranger chain: jump from the end of one section to the start of the next one.
+        if p.chain_on && !p.chain.is_empty() {
+            let cur = p.chain.get(self.chain_idx % p.chain.len()).and_then(|id| p.sections.iter().find(|s| s.id == *id));
+            if let Some(sec) = cur {
+                if self.arr_pos == sec.start + sec.len {
+                    self.chain_idx = (self.chain_idx + 1) % p.chain.len();
+                    if let Some(next) = p.sections.iter().find(|s| s.id == p.chain[self.chain_idx]) {
+                        self.arr_pos = next.start;
+                    }
+                }
+            }
+            return;
+        }
         if p.loop_on && p.loop_len > 0 && self.arr_pos == p.loop_start + p.loop_len {
             self.arr_pos = p.loop_start;
         }
@@ -710,42 +903,61 @@ impl Engine {
             td.gin[0][..n].fill(0.0);
             td.gin[1][..n].fill(0.0);
         }
-        // Pass 1: regular tracks, into the master or their group.
-        for ti in 0..self.tracks.len() {
-            if self.tracks[ti].kind == InstrumentKind::Group {
-                continue;
-            }
-            let group = self.tracks[ti].group_idx;
+        self.run_modulators(n);
+        // Tracks in routing order: sources first, then the tracks (groups, resamplers) they feed.
+        for oi in 0..self.order.len() {
+            let ti = self.order[oi];
+            let mut sc_ch = std::mem::replace(&mut self.tracks[ti].ch, ChannelDsp::new(self.sr));
+            let has_sc = sc_ch.devices.iter().any(|d| d.sc.is_some());
             let td = &mut self.tracks[ti];
-            td.ch.l[..n].fill(0.0);
-            td.ch.r[..n].fill(0.0);
-            td.inst.set_position(ctx.beat, ctx.playing);
-            td.inst.render(&mut td.ch.l[..n], &mut td.ch.r[..n]);
-            td.ch.process_devices(n, &ctx);
-            match group {
-                Some(g) => {
+            sc_ch.l[..n].fill(0.0);
+            sc_ch.r[..n].fill(0.0);
+            if td.kind != InstrumentKind::Group {
+                td.inst.set_position(ctx.beat, ctx.playing);
+                td.inst.render(&mut sc_ch.l[..n], &mut sc_ch.r[..n]);
+                for i in 0..n {
+                    let g = td.clip_gain.next();
+                    sc_ch.l[i] *= g;
+                    sc_ch.r[i] *= g;
+                }
+            }
+            for i in 0..n {
+                sc_ch.l[i] += td.gin[0][i];
+                sc_ch.r[i] += td.gin[1][i];
+            }
+            if has_sc {
+                sidechain_feed(&mut sc_ch, &self.tracks, n);
+            }
+            sc_ch.process_devices(n, &ctx);
+            let dest = self.tracks[ti].dest;
+            match dest {
+                Dest::Track(g) => {
                     let mut gl = [0.0f32; MAX_BLOCK];
                     let mut gr = [0.0f32; MAX_BLOCK];
-                    td.ch.output(n, &mut gl, &mut gr, Some(&mut sends));
+                    sc_ch.output(n, &mut gl, &mut gr, Some(&mut sends));
                     let gd = &mut self.tracks[g];
                     for i in 0..n {
                         gd.gin[0][i] += gl[i];
                         gd.gin[1][i] += gr[i];
                     }
                 }
-                None => td.ch.output(n, &mut ml, &mut mr, Some(&mut sends)),
+                Dest::Return(k) => {
+                    let mut gl = [0.0f32; MAX_BLOCK];
+                    let mut gr = [0.0f32; MAX_BLOCK];
+                    sc_ch.output(n, &mut gl, &mut gr, Some(&mut sends));
+                    for i in 0..n {
+                        sends[k][0][i] += gl[i];
+                        sends[k][1][i] += gr[i];
+                    }
+                }
+                Dest::Master => sc_ch.output(n, &mut ml, &mut mr, Some(&mut sends)),
             }
-        }
-        // Pass 2: group tracks process the sum of their members.
-        for td in self.tracks.iter_mut().filter(|t| t.kind == InstrumentKind::Group) {
-            td.ch.l[..n].copy_from_slice(&td.gin[0][..n]);
-            td.ch.r[..n].copy_from_slice(&td.gin[1][..n]);
-            td.ch.process_devices(n, &ctx);
-            td.ch.output(n, &mut ml, &mut mr, Some(&mut sends));
+            self.tracks[ti].ch = sc_ch;
         }
         for (k, rd) in self.returns.iter_mut().enumerate().take(2) {
             rd.l[..n].copy_from_slice(&sends[k][0][..n]);
             rd.r[..n].copy_from_slice(&sends[k][1][..n]);
+            sidechain_feed(rd, &self.tracks, n);
             rd.process_devices(n, &ctx);
             rd.output(n, &mut ml, &mut mr, None);
         }
@@ -760,6 +972,7 @@ impl Engine {
         let m = &mut self.master;
         m.l[..n].copy_from_slice(&ml[..n]);
         m.r[..n].copy_from_slice(&mr[..n]);
+        sidechain_feed(m, &self.tracks, n);
         m.process_devices(n, &ctx);
         let mut ol = [0.0f32; MAX_BLOCK];
         let mut or = [0.0f32; MAX_BLOCK];
@@ -892,7 +1105,7 @@ impl Engine {
     }
 }
 
-fn apply_devices(ch: &mut ChannelDsp, devs: &[Device], autos: &[(AutoTarget, f32)], ctx: &Ctx, force: bool) {
+fn apply_devices(ch: &mut ChannelDsp, devs: &[Device], autos: &[(AutoTarget, f32)], mods: &[(AutoTarget, f32)], ctx: &Ctx, force: bool) {
     for (dd, d) in ch.devices.iter_mut().zip(devs) {
         dd.scratch.clear();
         dd.scratch.extend_from_slice(&d.params);
@@ -904,6 +1117,50 @@ fn apply_devices(ch: &mut ChannelDsp, devs: &[Device], autos: &[(AutoTarget, f32
                 }
             }
         }
+        for &(target, off) in mods {
+            if let AutoTarget::Device { id, param } = target {
+                if id == d.id && param < defs.len() {
+                    dd.scratch[param] = defs[param].from_norm((defs[param].to_norm(dd.scratch[param]) + off).clamp(0.0, 1.0));
+                }
+            }
+        }
         dd.apply(ctx, force);
+        for (cd, c) in dd.chains.iter_mut().zip(&d.chains) {
+            apply_devices(cd, &c.devices, autos, mods, ctx, force);
+            cd.set_mix(c.volume, c.pan, [0.0; 2], c.mute);
+        }
+    }
+}
+
+/// Sorts tracks so every source is processed before the track it feeds. Feedback loops are
+/// broken by sending the offending track to the master.
+fn route_order(tracks: &mut [TrackDsp]) -> Vec<usize> {
+    let n = tracks.len();
+    let mut depth = vec![0usize; n];
+    for i in 0..n {
+        let mut seen = vec![i];
+        let mut cur = i;
+        while let Dest::Track(j) = tracks[cur].dest {
+            if seen.contains(&j) {
+                tracks[cur].dest = Dest::Master;
+                break;
+            }
+            seen.push(j);
+            cur = j;
+        }
+        depth[i] = seen.len();
+    }
+    let mut order: Vec<usize> = (0..n).collect();
+    order.sort_by_key(|&i| std::cmp::Reverse(depth[i]));
+    order
+}
+
+/// Copies the current (or previous block's) post-device signal of a source track.
+fn sidechain_feed(ch: &mut ChannelDsp, tracks: &[TrackDsp], n: usize) {
+    for d in ch.devices.iter_mut() {
+        let Some(src) = d.sc else { continue };
+        if let Some(s) = tracks.iter().find(|t| t.id == src) {
+            d.fx.sidechain_input(&s.ch.l[..n], &s.ch.r[..n]);
+        }
     }
 }

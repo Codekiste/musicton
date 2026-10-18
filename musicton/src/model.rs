@@ -62,7 +62,7 @@ impl InstrumentKind {
             Self::Drums => &params::DRUM_PARAMS,
             Self::Bass => &params::BASS_PARAMS,
             Self::Synth => &params::SYNTH_PARAMS,
-            Self::Sampler => &params::SIMPLER_PARAMS,
+            Self::Sampler => &params::SAMPLER_PARAMS,
             Self::Fm4 => &params::OPERATOR_PARAMS,
             Self::Morph => &params::WAVETABLE_PARAMS,
             Self::StringModel => &params::TENSION_PARAMS,
@@ -130,6 +130,7 @@ pub enum DeviceKind {
     Tuner,
     Vocoder,
     ChannelEq,
+    Rack,
 }
 
 /// Browser folders for audio effect categories.
@@ -141,10 +142,14 @@ pub const DEVICE_CATEGORIES: &[(&str, &[DeviceKind])] = &[
     ("EQ & Filters", &[DeviceKind::FilterSweep, DeviceKind::ChannelEq, DeviceKind::DjEq, DeviceKind::Eq8]),
     ("Modulation", &[DeviceKind::PanLfo, DeviceKind::Chorus, DeviceKind::Flanger, DeviceKind::FreqShifter, DeviceKind::Phaser]),
     ("Reverb & Resonance", &[DeviceKind::BodyResonator, DeviceKind::ChordResonator, DeviceKind::Reverb, DeviceKind::Vocoder]),
-    ("Utilities", &[DeviceKind::Analyzer, DeviceKind::Tuner, DeviceKind::Utility]),
+    ("Utilities", &[DeviceKind::Analyzer, DeviceKind::Tuner, DeviceKind::Utility, DeviceKind::Rack]),
 ];
 
 impl DeviceKind {
+    /// Devices whose detector can listen to another track.
+    pub fn has_sidechain(self) -> bool {
+        matches!(self, Self::Compressor | Self::Sidechain | Self::Gate | Self::BusCompressor)
+    }
     pub fn all() -> impl Iterator<Item = DeviceKind> {
         DEVICE_CATEGORIES.iter().flat_map(|(_, k)| k.iter().copied())
     }
@@ -186,6 +191,7 @@ impl DeviceKind {
             Self::Tuner => "Tuner",
             Self::Vocoder => "Vocoder",
             Self::ChannelEq => "Channel EQ",
+            Self::Rack => "Rack",
         }
     }
     pub fn info(self) -> &'static str {
@@ -214,7 +220,7 @@ impl DeviceKind {
             Self::Gate => "Mutes the signal below the threshold. Tightens drums and removes noise.",
             Self::BusCompressor => "Bus compressor modelled on classic console designs - glues groups and the master together.",
             Self::GrainDelay => "Splits the delayed signal into grains with random spray and pitch.",
-            Self::Multiband => "Three-band compressor/expander with upward and downward compression (OTT style).",
+            Self::Multiband => "Three-band compressor/expander with upward and downward compression.",
             Self::Overdrive => "Band-limited overdrive like a guitar pedal.",
             Self::Stompbox => "Guitar pedal distortion: overdrive, distortion and fuzz with a 3-band EQ.",
             Self::Phaser => "Sweeping all-pass filter phaser.",
@@ -226,6 +232,7 @@ impl DeviceKind {
             Self::Tuner => "Shows the pitch of the incoming audio.",
             Self::Vocoder => "Imposes the spectrum of the track onto an internal saw, pulse or noise carrier - robot voices and talking synths.",
             Self::ChannelEq => "Simple, musical channel-strip EQ with low, sweepable mid and high bands.",
+            Self::Rack => "Container with parallel chains: each chain has its own devices, volume and pan; the outputs are summed (parallel compression, layered effects, dry/wet splits).",
         }
     }
     pub fn defs(self) -> &'static [ParamDef] {
@@ -266,6 +273,7 @@ impl DeviceKind {
             Self::Tuner => &params::TUNER_PARAMS,
             Self::Vocoder => &params::VOCODER_PARAMS,
             Self::ChannelEq => &params::CHANNELEQ_PARAMS,
+            Self::Rack => &params::RACK_PARAMS,
         }
     }
 }
@@ -373,11 +381,34 @@ pub struct Device {
     pub kind: DeviceKind,
     pub on: bool,
     pub params: Vec<f32>,
+    /// Compressor/Gate/Sidechain: track whose signal drives the device instead of its input.
+    #[serde(default)]
+    pub sc_source: Option<u64>,
+    /// Rack only: parallel chains whose outputs are summed.
+    #[serde(default)]
+    pub chains: Vec<RackChain>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct RackChain {
+    pub name: String,
+    pub devices: Vec<Device>,
+    /// Fader position like a channel (0.85 = 0 dB).
+    pub volume: f32,
+    pub pan: f32,
+    pub mute: bool,
+}
+
+impl RackChain {
+    pub fn new(name: &str) -> Self {
+        Self { name: name.into(), devices: vec![], volume: 0.85, pan: 0.0, mute: false }
+    }
 }
 
 impl Device {
     pub fn new(id: u64, kind: DeviceKind) -> Self {
-        Self { id, kind, on: true, params: params::defaults(kind.defs()) }
+        let chains = if kind == DeviceKind::Rack { vec![RackChain::new("Chain 1"), RackChain::new("Chain 2")] } else { vec![] };
+        Self { id, kind, on: true, params: params::defaults(kind.defs()), sc_source: None, chains }
     }
     pub fn with(mut self, idx: usize, v: f32) -> Self {
         self.params[idx] = v;
@@ -455,6 +486,9 @@ pub struct Clip {
     pub audio: Option<AudioClip>,
     #[serde(default)]
     pub follow: Option<Follow>,
+    /// Clip gain in dB, applied before the device chain.
+    #[serde(default)]
+    pub gain: f32,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
@@ -526,11 +560,12 @@ impl Clip {
             notes: vec![],
             audio: Some(AudioClip { path: path.into(), warp, bpm, gain: 0.0, transpose: 0.0, offset: 0.0 }),
             follow: None,
+            gain: 0.0,
         }
     }
 
     pub fn new(name: &str, color: [u8; 3], bars: u32) -> Self {
-        Self { name: name.into(), color, len: bars * STEPS_PER_BAR, notes: vec![], audio: None, follow: None }
+        Self { name: name.into(), color, len: bars * STEPS_PER_BAR, notes: vec![], audio: None, follow: None, gain: 0.0 }
     }
     pub fn bars(&self) -> u32 {
         self.len.div_ceil(STEPS_PER_BAR)
@@ -679,6 +714,96 @@ pub struct Track {
     /// Group tracks: members hidden in the Launcher.
     #[serde(default)]
     pub folded: bool,
+    /// Where the track's output goes (groups take precedence).
+    #[serde(default)]
+    pub output: Output,
+    #[serde(default)]
+    pub modulators: Vec<Modulator>,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default, Serialize, Deserialize)]
+pub enum Output {
+    #[default]
+    Master,
+    /// Into another track's input (audio and group tracks process it with their devices).
+    Track(u64),
+    Return(u8),
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
+pub enum ModShape {
+    Sine,
+    Triangle,
+    Saw,
+    Square,
+    Random,
+    /// Attack/decay envelope retriggered by every note of the track.
+    Envelope,
+}
+
+impl ModShape {
+    pub const ALL: [ModShape; 6] = [Self::Sine, Self::Triangle, Self::Saw, Self::Square, Self::Random, Self::Envelope];
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Sine => "Sine",
+            Self::Triangle => "Triangle",
+            Self::Saw => "Saw",
+            Self::Square => "Square",
+            Self::Random => "Random",
+            Self::Envelope => "Envelope",
+        }
+    }
+}
+
+/// An LFO or envelope that moves one parameter.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Modulator {
+    pub id: u64,
+    pub shape: ModShape,
+    /// Division index (see `params::DIVISIONS`) when synced, otherwise Hz.
+    pub rate: f32,
+    pub synced: bool,
+    /// -1..1, scaled around the parameter's current value (normalized).
+    pub depth: f32,
+    /// Envelope attack / decay in seconds.
+    pub attack: f32,
+    pub decay: f32,
+    pub target: Option<AutoTarget>,
+    pub on: bool,
+}
+
+impl Modulator {
+    pub fn new(id: u64) -> Self {
+        Self { id, shape: ModShape::Sine, rate: 10.0, synced: true, depth: 0.3, attack: 0.005, decay: 0.3, target: None, on: true }
+    }
+}
+
+/// Named locator on the timeline.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Marker {
+    pub id: u64,
+    pub name: String,
+    pub pos: u32,
+}
+
+/// A song section on the arranger lane.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Section {
+    pub id: u64,
+    pub name: String,
+    pub start: u32,
+    pub len: u32,
+    pub color: [u8; 3],
+}
+
+/// A pattern (scene) placed on the playlist.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct PlaylistBlock {
+    pub id: u64,
+    pub scene: usize,
+    pub start: u32,
+    pub len: u32,
+    pub lane: u32,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -712,6 +837,17 @@ pub struct Project {
     /// -1 = full A, 0 = center, 1 = full B.
     #[serde(default)]
     pub crossfader: f32,
+    #[serde(default)]
+    pub markers: Vec<Marker>,
+    #[serde(default)]
+    pub sections: Vec<Section>,
+    /// Arranger chain: section ids played in this order (when `chain_on`).
+    #[serde(default)]
+    pub chain: Vec<u64>,
+    #[serde(default)]
+    pub chain_on: bool,
+    #[serde(default)]
+    pub playlist: Vec<PlaylistBlock>,
 }
 
 fn default_key() -> u8 {
@@ -787,12 +923,130 @@ impl Project {
             scale: 1,
             mappings: vec![],
             crossfader: 0.0,
+            markers: vec![],
+            sections: vec![],
+            chain: vec![],
+            chain_on: false,
+            playlist: vec![],
         }
     }
 
     pub fn new_id(&mut self) -> u64 {
         self.next_id += 1;
         self.next_id
+    }
+
+    // --- Arranger sections -------------------------------------------------------------------
+
+    pub const SECTION_NAMES: [&'static str; 6] = ["Intro", "Build", "Drop", "Break", "Drop 2", "Outro"];
+
+    /// Adds a section; returns its id.
+    pub fn add_section(&mut self, name: Option<&str>, start: u32, len: u32) -> u64 {
+        let id = self.new_id();
+        let n = self.sections.len();
+        let name = name.map(str::to_string).unwrap_or_else(|| Self::SECTION_NAMES[n % 6].to_string());
+        let color = CLIP_COLORS[(n * 5 + 2) % CLIP_COLORS.len()];
+        self.sections.push(Section { id, name, start, len: len.max(1), color });
+        self.sections.sort_by_key(|s| s.start);
+        id
+    }
+
+    /// Shifts all timeline content (clips, automation, markers, sections) at or after `at`.
+    fn shift_from(&mut self, at: u32, delta: i64) {
+        let sh = |x: u32| (x as i64 + delta).max(0) as u32;
+        for t in &mut self.tracks {
+            for c in t.arrangement.iter_mut().filter(|c| c.start >= at) {
+                c.start = sh(c.start);
+            }
+            for a in &mut t.automation {
+                for pt in a.points.iter_mut().filter(|pt| pt.0 >= at as f32) {
+                    pt.0 = (pt.0 + delta as f32).max(0.0);
+                }
+            }
+        }
+        for m in self.markers.iter_mut().filter(|m| m.pos >= at) {
+            m.pos = sh(m.pos);
+        }
+        for s in self.sections.iter_mut().filter(|s| s.start >= at) {
+            s.start = sh(s.start);
+        }
+    }
+
+    /// Moves a section together with the clips and automation inside it.
+    pub fn move_section(&mut self, id: u64, to: u32) {
+        let Some(s) = self.sections.iter_mut().find(|s| s.id == id) else { return };
+        let (from, len) = (s.start, s.len);
+        s.start = to;
+        let delta = to as f32 - from as f32;
+        let inside = |x: f32| x >= from as f32 && x < (from + len) as f32;
+        for t in &mut self.tracks {
+            for c in t.arrangement.iter_mut().filter(|c| inside(c.start as f32)) {
+                c.start = (c.start as f32 + delta).max(0.0) as u32;
+            }
+            for a in &mut t.automation {
+                for pt in a.points.iter_mut().filter(|pt| inside(pt.0)) {
+                    pt.0 = (pt.0 + delta).max(0.0);
+                }
+                a.points.sort_by(|x, y| x.0.total_cmp(&y.0));
+            }
+        }
+        self.sections.sort_by_key(|s| s.start);
+    }
+
+    /// Inserts a copy of a section (with its content) right after it; later content moves right.
+    pub fn duplicate_section(&mut self, id: u64) -> Option<u64> {
+        let s = self.sections.iter().find(|s| s.id == id)?.clone();
+        let end = s.start + s.len;
+        self.shift_from(end, s.len as i64);
+        for ti in 0..self.tracks.len() {
+            let copies: Vec<ArrClip> = self.tracks[ti]
+                .arrangement
+                .iter()
+                .filter(|c| c.start >= s.start && c.start < end)
+                .cloned()
+                .collect();
+            for mut c in copies {
+                c.id = self.new_id();
+                c.len = c.len.min(end - c.start);
+                c.start += s.len;
+                self.tracks[ti].arrangement.push(c);
+            }
+            self.tracks[ti].arrangement.sort_by_key(|c| c.start);
+            for a in &mut self.tracks[ti].automation {
+                let extra: Vec<(f32, f32)> =
+                    a.points.iter().filter(|p| p.0 >= s.start as f32 && p.0 < end as f32).map(|p| (p.0 + s.len as f32, p.1)).collect();
+                a.points.extend(extra);
+                a.points.sort_by(|x, y| x.0.total_cmp(&y.0));
+            }
+        }
+        let nid = self.new_id();
+        self.sections.push(Section { id: nid, name: s.name.clone(), start: end, len: s.len, color: s.color });
+        self.sections.sort_by_key(|s| s.start);
+        Some(nid)
+    }
+
+    /// Removes a section with its content and closes the gap.
+    pub fn delete_section(&mut self, id: u64) {
+        let Some(i) = self.sections.iter().position(|s| s.id == id) else { return };
+        let s = self.sections.remove(i);
+        let end = s.start + s.len;
+        for t in &mut self.tracks {
+            t.arrangement.retain(|c| c.start < s.start || c.start >= end);
+            for c in t.arrangement.iter_mut().filter(|c| c.start < s.start && c.start + c.len > s.start) {
+                c.len = s.start - c.start;
+            }
+            for a in &mut t.automation {
+                a.points.retain(|p| p.0 < s.start as f32 || p.0 >= end as f32);
+            }
+        }
+        self.markers.retain(|m| m.pos < s.start || m.pos >= end);
+        self.shift_from(end, -(s.len as i64));
+        self.chain.retain(|c| *c != id);
+    }
+
+    /// Content end of the playlist in steps.
+    pub fn playlist_end(&self) -> u32 {
+        self.playlist.iter().map(|b| b.start + b.len).max().unwrap_or(0)
     }
 
     pub fn track(&self, id: u64) -> Option<&Track> {
@@ -821,6 +1075,8 @@ impl Project {
             arm: false,
             group: None,
             folded: false,
+            output: Output::Master,
+            modulators: vec![],
         });
         id
     }
@@ -877,7 +1133,7 @@ impl Project {
             .chain(self.returns.iter_mut().map(|r| &mut r.channel))
             .chain(std::iter::once(&mut self.master));
         for ch in chans {
-            if let Some(d) = ch.devices.iter_mut().find(|d| d.id == id) {
+            if let Some(d) = find_device(&mut ch.devices, id) {
                 return Some(d);
             }
         }
@@ -908,15 +1164,44 @@ impl Project {
             .chain(self.returns.iter_mut().map(|r| &mut r.channel))
             .chain(std::iter::once(&mut self.master));
         for ch in chans {
-            for d in &mut ch.devices {
-                normalize_params(&mut d.params, d.kind.defs());
-                max_id = max_id.max(d.id);
+            normalize_devices(&mut ch.devices, &mut max_id);
+        }
+        for t in &self.tracks {
+            for m in &t.modulators {
+                max_id = max_id.max(m.id);
             }
         }
+        let ids = self.markers.iter().map(|m| m.id).chain(self.sections.iter().map(|s| s.id)).chain(self.playlist.iter().map(|b| b.id));
+        max_id = ids.fold(max_id, u64::max);
         self.next_id = max_id + 1;
     }
 }
 
 pub fn color32(c: [u8; 3]) -> egui::Color32 {
     egui::Color32::from_rgb(c[0], c[1], c[2])
+}
+
+/// Finds a device by id, including devices nested in rack chains.
+pub fn find_device(devs: &mut [Device], id: u64) -> Option<&mut Device> {
+    for d in devs {
+        if d.id == id {
+            return Some(d);
+        }
+        for c in &mut d.chains {
+            if let Some(x) = find_device(&mut c.devices, id) {
+                return Some(x);
+            }
+        }
+    }
+    None
+}
+
+fn normalize_devices(devs: &mut [Device], max_id: &mut u64) {
+    for d in devs {
+        normalize_params(&mut d.params, d.kind.defs());
+        *max_id = (*max_id).max(d.id);
+        for c in &mut d.chains {
+            normalize_devices(&mut c.devices, max_id);
+        }
+    }
 }

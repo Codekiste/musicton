@@ -122,6 +122,14 @@ impl App {
             self.hint(&resp, "Clip Length", "Loop length of the clip. Notes beyond the end are kept but not played.");
         });
         ui.horizontal(|ui| {
+            ui.label("Gain");
+            let resp = ui.add(egui::DragValue::new(&mut c.gain).range(-36.0..=12.0).speed(0.1).max_decimals(1).suffix(" dB"));
+            if resp.double_clicked() {
+                c.gain = 0.0;
+            }
+            self.hint(&resp, "Clip Gain", "Level of this clip before the track's devices - balance clips without touching the fader. Double-click for 0 dB.");
+        });
+        ui.horizontal(|ui| {
             let r1 = widgets::button(ui, "×2", false);
             if r1.clicked() {
                 let len = c.len;

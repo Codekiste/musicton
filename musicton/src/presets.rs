@@ -1,7 +1,7 @@
 //! Instrument presets, clip patterns and the demo project.
 
 use crate::model::*;
-use crate::params::{self, bass, lane_param, operator, simpler, synth, tension, wavetable, LANE_DECAY, LANE_LEVEL, LANE_TONE, LANE_TUNE, OP_PARAMS};
+use crate::params::{self, bass, lane_param, fmop, smp, synth, tension, wavetable, LANE_DECAY, LANE_LEVEL, LANE_TONE, LANE_TUNE, OP_PARAMS};
 
 pub struct InstrumentPreset {
     pub name: &'static str,
@@ -22,9 +22,9 @@ impl InstrumentPreset {
 
 pub static INSTRUMENT_PRESETS: &[InstrumentPreset] = &[
     InstrumentPreset {
-        name: "909 Punch",
+        name: "Punch Kit",
         kind: InstrumentKind::Drums,
-        info: "Classic punchy 909-style kit. Ten synthesized lanes: kick, clap, snare, rim, hats, ride, toms and perc.",
+        info: "Classic punchy drum-machine kit. Ten synthesized lanes: kick, clap, snare, rim, hats, ride, toms and perc.",
         overrides: || vec![],
     },
     InstrumentPreset {
@@ -95,7 +95,7 @@ pub static INSTRUMENT_PRESETS: &[InstrumentPreset] = &[
         overrides: || vec![],
     },
     InstrumentPreset {
-        name: "TB Acid",
+        name: "Classic Acid",
         kind: InstrumentKind::Bass,
         info: "Squelchy 303-style acid line. Accents (velocity >= 110) open the filter, slides glide into the next note.",
         overrides: || {
@@ -212,13 +212,13 @@ pub static INSTRUMENT_PRESETS: &[InstrumentPreset] = &[
         name: "Loop Slicer",
         kind: InstrumentKind::Sampler,
         info: "Slice mode: the sample is cut into 16 slices on C1 upwards, synced to the tempo. Load a drum break and rearrange it.",
-        overrides: || vec![(simpler::MODE, 2.0), (simpler::SLICES, 16.0), (simpler::WARP, 1.0), (simpler::BEATS, 4.0), (simpler::RELEASE, 0.02)],
+        overrides: || vec![(smp::MODE, 2.0), (smp::SLICES, 16.0), (smp::WARP, 1.0), (smp::BEATS, 4.0), (smp::RELEASE, 0.02)],
     },
     InstrumentPreset {
         name: "Sampled Keys",
         kind: InstrumentKind::Sampler,
         info: "Classic mode with loop and a soft envelope for playing samples like a keyboard.",
-        overrides: || vec![(simpler::LOOP, 1.0), (simpler::ATTACK, 0.01), (simpler::RELEASE, 0.4), (simpler::CUTOFF, 6000.0)],
+        overrides: || vec![(smp::LOOP, 1.0), (smp::ATTACK, 0.01), (smp::RELEASE, 0.4), (smp::CUTOFF, 6000.0)],
     },
     InstrumentPreset {
         name: "FM Bell",
@@ -233,7 +233,7 @@ pub static INSTRUMENT_PRESETS: &[InstrumentPreset] = &[
                 (4, 3.0),
                 (5, 0.0),
                 (6, 2.0),
-                (operator::VOLUME, 0.45),
+                (fmop::VOLUME, 0.45),
             ]
         },
     },
@@ -250,18 +250,18 @@ pub static INSTRUMENT_PRESETS: &[InstrumentPreset] = &[
                 (4, 0.5),
                 (5, 0.7),
                 (6, 0.08),
-                (operator::CUTOFF, 2500.0),
-                (operator::FEEDBACK, 0.0),
+                (fmop::CUTOFF, 2500.0),
+                (fmop::FEEDBACK, 0.0),
             ]
         },
     },
     InstrumentPreset {
         name: "FM E-Piano",
         kind: InstrumentKind::Fm4,
-        info: "DX-style electric piano: two operator pairs.",
+        info: "Classic FM electric piano: two operator pairs.",
         overrides: || {
             vec![
-                (operator::ALGO, 2.0),
+                (fmop::ALGO, 2.0),
                 (OP_PARAMS, 14.0),
                 (OP_PARAMS + 2, 0.22),
                 (OP_PARAMS + 4, 0.25),
@@ -276,7 +276,7 @@ pub static INSTRUMENT_PRESETS: &[InstrumentPreset] = &[
                 (4, 2.0),
                 (5, 0.2),
                 (6, 0.6),
-                (operator::SPREAD, 0.4),
+                (fmop::SPREAD, 0.4),
             ]
         },
     },
@@ -294,7 +294,7 @@ pub static INSTRUMENT_PRESETS: &[InstrumentPreset] = &[
                 (4, 0.25),
                 (5, 0.0),
                 (6, 0.1),
-                (operator::FEEDBACK, 0.4),
+                (fmop::FEEDBACK, 0.4),
                 (3 * OP_PARAMS + 2, 0.4),
                 (3 * OP_PARAMS, 11.0),
             ]
@@ -672,7 +672,7 @@ pub fn pattern(name: &str) -> Option<&'static Pattern> {
 pub fn new_project() -> Project {
     let mut p = Project::empty();
     let id = p.add_track("Drums", InstrumentKind::Drums, CLIP_COLORS[1]);
-    p.track_mut(id).unwrap().instrument = preset("909 Punch").build();
+    p.track_mut(id).unwrap().instrument = preset("Punch Kit").build();
     p
 }
 
@@ -686,9 +686,9 @@ pub fn demo_project() -> Project {
     }
 
     let tracks: [(&str, &str, [u8; 3]); 5] = [
-        ("Drums", "909 Punch", CLIP_COLORS[1]),
+        ("Drums", "Punch Kit", CLIP_COLORS[1]),
         ("Sub Bass", "Rolling Sub", CLIP_COLORS[9]),
-        ("Acid", "TB Acid", CLIP_COLORS[4]),
+        ("Acid", "Classic Acid", CLIP_COLORS[4]),
         ("Stabs", "Dub Stab", CLIP_COLORS[11]),
         ("Pad", "Warehouse Pad", CLIP_COLORS[20]),
     ];

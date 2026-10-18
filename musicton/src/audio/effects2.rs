@@ -711,6 +711,7 @@ pub struct Gate {
     hold_left: f32,
     open: bool,
     gr: f32,
+    sc: Option<[f32; MAX_BLOCK]>,
 }
 
 impl Effect for Gate {
@@ -725,8 +726,12 @@ impl Effect for Gate {
     fn process(&mut self, l: &mut [f32], r: &mut [f32], ctx: &Ctx) {
         let envc = one_pole_coef(0.002, ctx.sr);
         let mut min_g: f32 = 1.0;
+        let sc = self.sc.take();
         for i in 0..l.len() {
-            let lvl = l[i].abs().max(r[i].abs());
+            let lvl = match &sc {
+                Some(s) => s[i],
+                None => l[i].abs().max(r[i].abs()),
+            };
             self.env = if lvl > self.env { lvl } else { lvl + envc * (self.env - lvl) };
             if self.env > self.open_th {
                 self.open = true;
@@ -753,6 +758,17 @@ impl Effect for Gate {
     fn reduction(&self) -> f32 {
         self.gr.min(60.0)
     }
+    fn sidechain_input(&mut self, l: &[f32], r: &[f32]) {
+        self.sc = Some(sc_peaks(l, r));
+    }
+}
+
+fn sc_peaks(l: &[f32], r: &[f32]) -> [f32; MAX_BLOCK] {
+    let mut b = [0.0f32; MAX_BLOCK];
+    for i in 0..l.len().min(MAX_BLOCK) {
+        b[i] = l[i].abs().max(r[i].abs());
+    }
+    b
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -771,6 +787,7 @@ pub struct BusComp {
     env: f32,
     gr_db: f32,
     gr: f32,
+    sc: Option<[f32; MAX_BLOCK]>,
 }
 
 impl Effect for BusComp {
@@ -791,8 +808,12 @@ impl Effect for BusComp {
         let fast_rel = one_pole_coef(0.1, ctx.sr);
         let slow_rel = one_pole_coef(1.2, ctx.sr);
         let mut max_gr: f32 = 0.0;
+        let sc = self.sc.take();
         for i in 0..l.len() {
-            let lvl = gain_to_db(l[i].abs().max(r[i].abs()));
+            let lvl = gain_to_db(match &sc {
+                Some(s) => s[i],
+                None => l[i].abs().max(r[i].abs()),
+            });
             let over = (lvl - self.thresh).max(0.0);
             let target = over * (1.0 - 1.0 / self.ratio);
             let rel = if self.auto {
@@ -818,6 +839,9 @@ impl Effect for BusComp {
     }
     fn reduction(&self) -> f32 {
         self.gr
+    }
+    fn sidechain_input(&mut self, l: &[f32], r: &[f32]) {
+        self.sc = Some(sc_peaks(l, r));
     }
 }
 
