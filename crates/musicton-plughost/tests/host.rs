@@ -132,3 +132,17 @@ fn crashing_or_missing_plugin_reports_error() {
     // The host stays usable and returns silence.
     assert_eq!(h.block(4, vec![], vec![0.5; 8]), vec![0.0; 8]);
 }
+
+#[test]
+fn quit_ends_the_process() {
+    let mut h = Host::spawn();
+    Request::Quit.write(&mut h.to).unwrap();
+    h.to.flush().unwrap();
+    for _ in 0..50 {
+        if h.child.try_wait().unwrap().is_some() {
+            return;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    panic!("host did not exit after Quit");
+}

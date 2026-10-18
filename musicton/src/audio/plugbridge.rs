@@ -134,8 +134,16 @@ impl Bridge {
                 b2.alive.store(false, Ordering::Relaxed);
             })
             .ok();
-        REGISTRY.lock().insert(key, b.clone());
+        if let Some(old) = REGISTRY.lock().insert(key, b.clone()) {
+            old.quit();
+        }
         b
+    }
+
+    /// Ends the host process. (The bridge thread holds a reference itself, so dropping the
+    /// registry entry alone would never stop it.)
+    pub fn quit(&self) {
+        let _ = self.ctrl.try_send(Ctrl::Quit);
     }
 
     pub fn set_param(&self, id: u32, value: f64) {
@@ -260,7 +268,9 @@ pub fn get_blocking(key: u64) -> Option<Arc<Bridge>> {
 }
 
 pub fn remove(key: u64) {
-    REGISTRY.lock().remove(&key);
+    if let Some(b) = REGISTRY.lock().remove(&key) {
+        b.quit();
+    }
 }
 
 pub fn keys() -> Vec<u64> {
