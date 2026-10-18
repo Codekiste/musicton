@@ -1,0 +1,79 @@
+# Checks that the workspace builds on all three release platforms.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, macos-14, windows-2022]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev libjack-jackd2-dev libgtk-3-dev \
+            libx11-dev libx11-xcb-dev libxcursor-dev libxrandr-dev libxi-dev libxkbcommon-dev \
+            libxcb1-dev libxcb-icccm4-dev libxcb-dri2-0-dev libgl1-mesa-dev libwayland-dev
+      - run: cargo build --workspace --release
+
+  # Builds the real installers (same scripts as the Release workflow) so packaging
+  # breakage shows up before a tag is pushed. Artifacts can be downloaded from the run.
+  package:
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [linux, macos, windows]
+        product: [musicton, b303]
+        include:
+          - { platform: linux, os: ubuntu-22.04 }
+          - { platform: macos, os: macos-14 }
+          - { platform: windows, os: windows-2022 }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform == 'macos' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: package-${{ matrix.platform }}-${{ matrix.product }}
+      - name: Linux build dependencies
+        if: matrix.platform == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev libjack-jackd2-dev libgtk-3-dev \
+            libx11-dev libx11-xcb-dev libxcursor-dev libxrandr-dev libxi-dev libxkbcommon-dev \
+            libxcb1-dev libxcb-icccm4-dev libxcb-dri2-0-dev libgl1-mesa-dev libwayland-dev
+      - name: Version from Cargo.toml
+        shell: bash
+        run: |
+          pkg=$([ "${{ matrix.product }}" = musicton ] && echo musicton || echo b303-plugin)
+          v=$(cargo metadata --no-deps --format-version 1 | jq -r --arg p "$pkg" '.packages[] | select(.name==$p) | .version')
+          echo "VERSION=$v-ci" >> "$GITHUB_ENV"
+      - name: Package (Linux / macOS)
+        if: matrix.platform != 'windows'
+        shell: bash
+        run: packaging/${{ matrix.platform }}/build-${{ matrix.product }}.sh "$VERSION"
+      - name: Package (Windows)
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: packaging/windows/build.ps1 -Product ${{ matrix.product }} -Version $env:VERSION
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ci-${{ matrix.product }}-${{ matrix.platform }}
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 7

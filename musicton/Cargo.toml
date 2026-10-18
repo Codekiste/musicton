@@ -1,6 +1,6 @@
 [package]
 name = "musicton"
-version.workspace = true
+version = "0.1.0"  # Musicton app version (tag: musicton-vX.Y.Z)
 edition.workspace = true
 license.workspace = true
 description = "A techno-focused DAW for Linux"

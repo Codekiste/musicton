@@ -170,11 +170,16 @@ impl Bridge {
             return Ok(json!("Musicton is already running"));
         }
         let exe = std::env::current_exe().map_err(|e| e.to_string())?;
-        let app = exe.with_file_name("musicton");
-        use std::os::unix::process::CommandExt;
-        std::process::Command::new(&app)
-            .arg("--x11")
-            .process_group(0)
+        let app = exe.with_file_name(format!("musicton{}", std::env::consts::EXE_SUFFIX));
+        let mut cmd = std::process::Command::new(&app);
+        #[cfg(unix)]
+        {
+            use std::os::unix::process::CommandExt;
+            cmd.process_group(0);
+        }
+        #[cfg(target_os = "linux")]
+        cmd.arg("--x11");
+        cmd
             .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())

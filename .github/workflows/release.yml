@@ -1,0 +1,128 @@
+# Builds installers for Linux, macOS and Windows when a release tag is pushed.
+#   musicton-vX.Y.Z  -> Musicton app (.deb/.tar.gz, .dmg, setup .exe)
+#   b303-vX.Y.Z      -> B-303 plug-in (VST3/CLAP: .tar.gz, .pkg, setup .exe)
+# Tags are created by scripts/release.sh, see RELEASING.md.
+name: Release
+
+on:
+  push:
+    tags: ["musicton-v*", "b303-v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to (re)build, e.g. musicton-v0.1.0"
+        required: true
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+  TAG: ${{ inputs.tag || github.ref_name }}
+
+jobs:
+  meta:
+    runs-on: ubuntu-latest
+    outputs:
+      product: ${{ steps.m.outputs.product }}
+      version: ${{ steps.m.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - id: m
+        shell: bash
+        run: |
+          case "$TAG" in
+            musicton-v*) product=musicton; pkg=musicton ;;
+            b303-v*)     product=b303;     pkg=b303-plugin ;;
+            *) echo "unknown tag $TAG"; exit 1 ;;
+          esac
+          version="${TAG#*-v}"
+          manifest=$(cargo metadata --no-deps --format-version 1 | jq -r --arg p "$pkg" '.packages[] | select(.name==$p) | .version')
+          if [ "$manifest" != "$version" ]; then
+            echo "::error::Tag $TAG does not match $pkg version $manifest in Cargo.toml"; exit 1
+          fi
+          echo "product=$product" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: meta
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            platform: linux
+          - os: macos-14
+            platform: macos
+          - os: windows-2022
+            platform: windows
+    runs-on: ${{ matrix.os }}
+    env:
+      PRODUCT: ${{ needs.meta.outputs.product }}
+      VERSION: ${{ needs.meta.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform == 'macos' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.platform }}-${{ needs.meta.outputs.product }}
+
+      - name: Linux build dependencies
+        if: matrix.platform == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev libjack-jackd2-dev libgtk-3-dev \
+            libx11-dev libx11-xcb-dev libxcursor-dev libxrandr-dev libxi-dev libxkbcommon-dev \
+            libxcb1-dev libxcb-icccm4-dev libxcb-dri2-0-dev libgl1-mesa-dev libwayland-dev
+
+      - name: Package (Linux / macOS)
+        if: matrix.platform != 'windows'
+        shell: bash
+        run: packaging/${{ matrix.platform }}/build-${PRODUCT}.sh "$VERSION"
+
+      - name: Package (Windows)
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: packaging/windows/build.ps1 -Product $env:PRODUCT -Version $env:VERSION
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ needs.meta.outputs.product }}-${{ matrix.platform }}
+          path: dist/*
+          if-no-files-found: error
+
+  publish:
+    needs: [meta, build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Release notes from changelog
+        shell: bash
+        run: |
+          if [ "${{ needs.meta.outputs.product }}" = musicton ]; then f=CHANGELOG.md; title="Musicton"; else f=b303-plugin/CHANGELOG.md; title="B-303 Bassline"; fi
+          v="${{ needs.meta.outputs.version }}"
+          awk -v v="$v" '$0 ~ "^## \\[" v "\\]" {on=1; next} on && /^## \[/ {exit} on' "$f" > notes.md
+          cat packaging/RELEASE_FOOTER.md >> notes.md
+          echo "TITLE=$title $v" >> "$GITHUB_ENV"
+          (cd dist && sha256sum * > SHA256SUMS.txt)
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.TAG }}
+          name: ${{ env.TITLE }}
+          body_path: notes.md
+          prerelease: ${{ startsWith(needs.meta.outputs.version, '0.') }}
+          files: dist/*
