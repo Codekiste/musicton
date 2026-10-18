@@ -11,7 +11,7 @@ use std::collections::HashMap;
 
 const HEADER_W: f32 = 176.0;
 const RULER_H: f32 = 32.0;
-const LANE_H: f32 = 54.0;
+const LANE_H: f32 = 56.0;
 const SCROLLBAR: f32 = 12.0;
 const AUTO_H: f32 = 56.0;
 
@@ -212,7 +212,7 @@ impl App {
         if self.project.loop_on {
             let lx0 = x_of(self.project.loop_start as f32, sx);
             let lx1 = x_of((self.project.loop_start + self.project.loop_len) as f32, sx);
-            lp.rect_filled(Rect::from_x_y_ranges(lx0..=lx1, lanes.y_range()), 0.0, Color32::from_rgba_unmultiplied(255, 176, 31, 10));
+            lp.rect_filled(Rect::from_x_y_ranges(lx0..=lx1, lanes.y_range()), 0.0, Color32::from_rgba_unmultiplied(232, 196, 74, 9));
         }
 
         if self.arr.ext.playlist {
@@ -284,7 +284,7 @@ impl App {
                     self.arr.follow = !self.arr.follow;
                 }
                 self.hint(&r, "Follow", "Scrolls the timeline to keep the playhead visible.");
-                let r = widgets::button(ui, "Scenes→", false);
+                let r = widgets::button(ui, "Scenes >", false);
                 if r.clicked() {
                     self.scenes_to_arrangement();
                 }
@@ -319,20 +319,21 @@ impl App {
         let p = ui.painter().with_clip_rect(ruler);
         let sx = self.arr.scroll_x;
         let pps = self.arr.pps;
-        p.rect_filled(ruler, 0.0, PANEL);
+        gradient(&p, ruler, Color32::from_rgb(0x34, 0x37, 0x3d), Color32::from_rgb(0x26, 0x28, 0x2d));
         let brace = Rect::from_min_max(ruler.min, pos2(ruler.right(), ruler.top() + 11.0));
+        p.rect_filled(brace, 0.0, Color32::from_rgb(0x1f, 0x21, 0x25));
         let ls = self.project.loop_start as f32;
         let le = (self.project.loop_start + self.project.loop_len) as f32;
         let lr = Rect::from_x_y_ranges(x_of(ls, sx)..=x_of(le, sx), brace.top() + 1.0..=brace.bottom() - 1.0);
-        p.rect_filled(lr, 1.0, if self.project.loop_on { ACCENT } else { Color32::from_rgb(0x70, 0x70, 0x70) });
+        p.rect_filled(lr, 3.0, if self.project.loop_on { CYCLE } else { Color32::from_rgb(0x5a, 0x5c, 0x62) });
         let first_bar = (sx / 16.0).floor() as i64;
         let last_bar = ((sx + ruler.width() / pps) / 16.0).ceil() as i64;
         let bar_step = if pps < 1.0 { 8 } else if pps < 2.0 { 4 } else if pps < 3.0 { 2 } else { 1 };
         for bar in first_bar.max(0)..=last_bar {
             let x = x_of(bar as f32 * 16.0, sx);
             if bar % bar_step == 0 {
-                p.line_segment([pos2(x, ruler.top() + 13.0), pos2(x, ruler.bottom())], Stroke::new(1.0_f32, TEXT_DIM));
-                p.text(pos2(x + 3.0, ruler.top() + 13.0), Align2::LEFT_TOP, (bar + 1).to_string(), FontId::proportional(10.5), TEXT);
+                p.line_segment([pos2(x, ruler.bottom() - 7.0), pos2(x, ruler.bottom())], Stroke::new(1.0_f32, TEXT_DIM));
+                p.text(pos2(x + 3.0, ruler.top() + 12.0), Align2::LEFT_TOP, (bar + 1).to_string(), FontId::proportional(11.0), TEXT);
             }
         }
 
@@ -388,8 +389,8 @@ impl App {
         }
         self.hint(
             &resp,
-            "Ruler / Loop Brace",
-            "Click the ruler to set the start marker, double-click to play from there. Top strip: loop brace - drag to move, drag its edges to resize, click to toggle the loop.",
+            "Ruler / Cycle",
+            "Click the ruler to set the start marker, double-click to play from there. Top strip: cycle region - drag to move, drag its edges to resize, click to switch cycle on or off.",
         );
     }
 
@@ -398,14 +399,27 @@ impl App {
         let col = color32(t.color);
         let selected = self.sel == Sel::Track(id);
         let resp = ui.interact(r, ui.id().with(("arr_hdr", id)), Sense::click());
-        ui.painter().rect_filled(r, 0.0, if selected { PANEL_LIGHT } else { PANEL });
-        ui.painter().rect_filled(Rect::from_min_size(r.min, vec2(5.0, r.height())), 0.0, col);
         let name = t.name.clone();
-        let (mute, solo) = (t.channel.mute, t.channel.solo);
+        let (mute, solo, volume) = (t.channel.mute, t.channel.solo, t.channel.volume);
         let idx = self.project.track_index(id).unwrap_or(0) + 1;
         let (frozen, locked, hidden, info, is_audio, armed, show_takes, n_takes, is_group) =
             (t.frozen.is_some(), t.locked, t.hidden, t.info.clone(), t.instrument.kind == InstrumentKind::Audio, t.arm, t.show_takes, t.takes.len(), t.instrument.kind == InstrumentKind::Group);
-        let title = if t.icon.is_empty() { name.clone() } else { format!("{} {name}", t.icon) };
+        let icon = t.icon.clone();
+        let p = ui.painter().clone();
+        // Body with a soft gradient; the selected track gets a blue tint.
+        let (top, bottom) = if selected {
+            (Color32::from_rgb(0x3a, 0x4a, 0x60), Color32::from_rgb(0x2c, 0x37, 0x47))
+        } else {
+            (Color32::from_rgb(0x33, 0x35, 0x3b), Color32::from_rgb(0x29, 0x2b, 0x30))
+        };
+        gradient(&p, r, top, bottom);
+        p.line_segment([r.left_bottom(), r.right_bottom()], Stroke::new(1.0_f32, LINE));
+        p.rect_filled(Rect::from_min_size(r.min, vec2(4.0, r.height())), 0.0, col);
+        // Number badge in the track color, then icon and name.
+        let badge = Rect::from_min_size(r.left_top() + vec2(10.0, 7.0), vec2(20.0, 16.0));
+        p.rect_filled(badge, 3.0, if mute { darken(col, 0.45) } else { col });
+        p.text(badge.center(), Align2::CENTER_CENTER, idx.to_string(), FontId::proportional(10.5), on_color(col));
+        let title = if icon.is_empty() { name.clone() } else { format!("{icon} {name}") };
         let mut flags = String::new();
         if frozen {
             flags.push_str(" ❄");
@@ -416,80 +430,117 @@ impl App {
         if hidden {
             flags.push_str(" (hidden)");
         }
-        ui.painter().with_clip_rect(r).text(r.left_top() + vec2(10.0, 5.0), Align2::LEFT_TOP, format!("{title}{flags}"), FontId::proportional(12.0), if frozen { Color32::from_rgb(0x9c, 0xd8, 0xff) } else { TEXT });
+        let name_col = if frozen { Color32::from_rgb(0x9c, 0xd8, 0xff) } else if mute { TEXT_DIM } else { TEXT };
+        p.with_clip_rect(Rect::from_min_max(r.min, pos2(r.right() - 92.0, r.bottom()))).text(
+            pos2(badge.right() + 7.0, badge.center().y),
+            Align2::LEFT_CENTER,
+            format!("{title}{flags}"),
+            FontId::proportional(12.5),
+            name_col,
+        );
         let follow = self.track_status(id).is_none_or(|s| s.follow_arr);
         if !follow {
-            ui.painter().text(r.left_top() + vec2(10.0, 21.0), Align2::LEFT_TOP, "playing Launcher", FontId::proportional(9.5), ACCENT);
+            p.text(pos2(badge.right() + 7.0, badge.bottom() + 2.0), Align2::LEFT_TOP, "playing Launcher", FontId::proportional(9.0), Color32::from_rgb(0xff, 0xb0, 0x40));
         }
         let mut new_mute = mute;
         let mut new_solo = solo;
         let auto_on = self.auto_open.contains(&id);
-        ui.scope_builder(UiBuilder::new().max_rect(Rect::from_min_size(pos2(r.right() - 84.0, r.bottom() - 24.0), vec2(84.0, 22.0))), |ui| {
+        // Round buttons, top right.
+        let n_btn = if is_audio { 4.0 } else { 3.0 };
+        ui.scope_builder(UiBuilder::new().max_rect(Rect::from_min_size(pos2(r.right() - n_btn * 21.0 - 6.0, r.top() + 5.0), vec2(n_btn * 21.0 + 4.0, 20.0))), |ui| {
             ui.horizontal(|ui| {
-                let ra = widgets::toggle(ui, &idx.to_string(), !mute, ACCENT, vec2(24.0, 18.0));
-                if ra.clicked() {
+                ui.spacing_mut().item_spacing.x = 3.0;
+                let rm = widgets::round_toggle(ui, "M", mute, MUTE_COL, 18.0);
+                if rm.clicked() {
                     new_mute = !mute;
                 }
-                self.hint(&ra, "Track Activator", "Turns the track on/off (mute).");
-                let rs = widgets::toggle(ui, "S", solo, BLUE, vec2(22.0, 18.0));
+                rm.context_menu(|ui| self.map_menu(ui, MapTarget::Mute(id), None));
+                self.hint(&rm, "Mute", "Silences the track.");
+                let rs = widgets::round_toggle(ui, "S", solo, SOLO_COL, 18.0);
                 if rs.clicked() {
                     new_solo = !solo;
                 }
+                rs.context_menu(|ui| self.map_menu(ui, MapTarget::Solo(id), None));
                 self.hint(&rs, "Solo", "Plays only soloed tracks.");
-                let rau = widgets::toggle(ui, "A", auto_on, ACCENT, vec2(22.0, 18.0));
-                if rau.clicked() {
+                if is_audio {
+                    let rr = widgets::round_toggle(ui, "R", armed, REC, 18.0);
+                    if rr.clicked() {
+                        self.toggle_arm(id);
+                    }
+                    self.hint(&rr, "Record Arm", "Arms this audio track for recording from the audio input.");
+                }
+                let ra = widgets::round_toggle(ui, "A", auto_on, ACCENT, 18.0);
+                if ra.clicked() {
                     if auto_on {
                         self.auto_open.remove(&id);
                     } else {
                         self.auto_open.insert(id);
                     }
                 }
-                self.hint(&rau, "Automation Lane", "Shows the automation lane for this track. Draw breakpoints to change volume, pan, sends or any device parameter over time.");
+                self.hint(&ra, "Automation", "Shows the automation lane: draw breakpoints for volume, pan, sends or any device parameter.");
             });
         });
-        // Configurable header buttons (right-click a track > View > Configure Track Header).
+        // Bottom row: configurable buttons and a slim volume slider.
         let cfg = self.header_cfg;
         let mut act: Option<&str> = None;
-        ui.scope_builder(UiBuilder::new().max_rect(Rect::from_min_size(pos2(r.left() + 8.0, r.bottom() - 24.0), vec2(r.width() - 96.0, 22.0))), |ui| {
+        let row = Rect::from_min_max(pos2(r.left() + 10.0, r.bottom() - 22.0), pos2(r.right() - 8.0, r.bottom() - 4.0));
+        let mut used = 0.0;
+        ui.scope_builder(UiBuilder::new().max_rect(row), |ui| {
             ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing.x = 2.0;
+                let start = ui.cursor().left();
                 if cfg.freeze && !is_group {
-                    let b = widgets::toggle(ui, "❄", frozen, Color32::from_rgb(0x9c, 0xd8, 0xff), vec2(20.0, 18.0));
+                    let b = widgets::toggle(ui, "❄", frozen, Color32::from_rgb(0x6c, 0xb8, 0xf0), vec2(20.0, 16.0));
                     if b.clicked() {
                         act = Some("freeze");
                     }
                     self.hint(&b, "Freeze", "Renders the track to audio to save CPU; click again to unfreeze and edit it.");
                 }
                 if cfg.protect {
-                    let b = widgets::toggle(ui, "🔒", locked, ACCENT, vec2(20.0, 18.0));
+                    let b = widgets::toggle(ui, "🔒", locked, ACCENT, vec2(20.0, 16.0));
                     if b.clicked() {
                         act = Some("protect");
                     }
                     self.hint(&b, "Protect", "Locks the track against edits (clips, devices, deleting).");
                 }
                 if cfg.hide {
-                    let b = widgets::toggle(ui, "H", hidden, TEXT_DIM, vec2(20.0, 18.0));
+                    let b = widgets::toggle(ui, "H", hidden, TEXT_DIM, vec2(20.0, 16.0));
                     if b.clicked() {
                         act = Some("hide");
                     }
                     self.hint(&b, "Hide", "Hides the track from the views (it keeps playing). Show hidden tracks from any track's View menu.");
                 }
-                if cfg.arm && is_audio {
-                    let b = widgets::toggle(ui, "●", armed, REC, vec2(20.0, 18.0));
-                    if b.clicked() {
-                        act = Some("arm");
-                    }
-                    self.hint(&b, "Record Arm", "Arms this audio track for recording from the audio input.");
-                }
                 if cfg.takes && n_takes > 0 {
-                    let b = widgets::toggle(ui, "T", show_takes, BLUE, vec2(20.0, 18.0));
+                    let b = widgets::toggle(ui, "T", show_takes, BLUE, vec2(20.0, 16.0));
                     if b.clicked() {
                         act = Some("takes");
                     }
                     self.hint(&b, "Take Lanes", "Shows the alternative recordings of this track for comping.");
                 }
+                used = ui.cursor().left() - start;
             });
         });
+        let _ = cfg.arm;
+        let slider = Rect::from_min_max(pos2(row.left() + used + if used > 0.0 { 4.0 } else { 0.0 }, row.center().y - 3.0), pos2(row.right(), row.center().y + 3.0));
+        let sresp = ui.interact(slider.expand2(vec2(0.0, 5.0)), ui.id().with(("hdr_vol", id)), Sense::click_and_drag());
+        let mut new_vol = volume;
+        if sresp.dragged() {
+            let fine = ui.input(|i| i.modifiers.shift);
+            new_vol = (volume + sresp.drag_delta().x / slider.width() * if fine { 0.2 } else { 1.0 }).clamp(0.0, 1.0);
+        }
+        if sresp.double_clicked() {
+            new_vol = 0.85;
+        }
+        p.rect_filled(slider, 3.0, KNOB_BG);
+        let fill = Rect::from_min_size(slider.min, vec2(slider.width() * new_vol, slider.height()));
+        p.rect_filled(fill, 3.0, if mute { darken(col, 0.4) } else { darken(col, 0.85) });
+        let kx = slider.left() + slider.width() * new_vol;
+        p.circle_filled(pos2(kx, slider.center().y), 5.0, if sresp.dragged() { ACCENT } else { Color32::from_rgb(0xd8, 0xdb, 0xe0) });
+        let zero = slider.left() + slider.width() * 0.85;
+        p.line_segment([pos2(zero, slider.top() - 2.0), pos2(zero, slider.bottom() + 2.0)], Stroke::new(1.0_f32, TEXT_DIM));
+        sresp.context_menu(|ui| self.map_menu(ui, MapTarget::Volume(id), Some(id)));
+        let db = crate::audio::dsp::gain_to_db(crate::audio::dsp::fader_to_gain(new_vol));
+        self.hint(&sresp, "Volume", &format!("{} dB. Drag (Shift: fine), double-click for 0 dB.", if db < -100.0 { "-inf".to_string() } else { format!("{db:.1}") }));
         match act {
             Some("freeze") => {
                 let r = if frozen { self.unfreeze_track(id) } else { self.freeze_track(id) };
@@ -500,7 +551,6 @@ impl App {
             }
             Some("protect") => self.set_track_locked(id, !locked),
             Some("hide") => self.set_track_hidden(id, !hidden),
-            Some("arm") => self.toggle_arm(id),
             Some("takes") => {
                 if let Some(t) = self.project.track_mut(id) {
                     t.show_takes = !t.show_takes;
@@ -509,10 +559,11 @@ impl App {
             }
             _ => {}
         }
-        if new_mute != mute || new_solo != solo {
+        if new_mute != mute || new_solo != solo || new_vol != volume {
             if let Some(t) = self.project.track_mut(id) {
                 t.channel.mute = new_mute;
                 t.channel.solo = new_solo;
+                t.channel.volume = new_vol;
             }
             self.touch();
         }
@@ -520,12 +571,18 @@ impl App {
             self.select_track(id);
             self.detail = Detail::Devices;
         }
+        if resp.double_clicked() {
+            self.renaming = Some((super::RenameTarget::Track(id), name.clone()));
+        }
+        if self.renaming.as_ref().is_some_and(|(t, _)| *t == super::RenameTarget::Track(id)) {
+            self.rename_field(ui, Rect::from_min_size(pos2(badge.right() + 4.0, badge.top() - 2.0), vec2(r.width() - 140.0, 20.0)));
+        }
         resp.context_menu(|ui| self.track_menu(ui, id));
         if let Some(p) = self.drop_target(ui, r, |p| matches!(p, Payload::Device(_) | Payload::MidiFx(_) | Payload::Instrument(_) | Payload::Plugin(_))) {
             self.drop_on_track(id, p);
         }
         let body = if info.is_empty() {
-            "Track header. Click to select, right-click for options. Drop effects or instruments here.".to_string()
+            "Track header. Click to select, double-click to rename, right-click for options. Drop effects or instruments here.".to_string()
         } else {
             format!("{info}\n\n(Info text - right-click > Edit Info Text to change it.)")
         };
@@ -586,9 +643,11 @@ impl App {
             let r = Rect::from_min_max(pos2(x0, row.top() + 1.0), pos2(x1.max(x0 + 3.0), row.bottom() - 2.0));
             let col = if ac.clip.muted { Color32::from_rgb(0x6a, 0x6a, 0x6a) } else { color32(ac.clip.color) };
             let selected = self.sel_clip == Some(ClipRef::Arr { track, id: ac.id }) || self.arr.multi.contains(&(track, ac.id));
-            p.rect_filled(r, 2.0, darken(col, 0.55));
-            let head = Rect::from_min_size(r.min, vec2(r.width(), 13.0));
-            p.rect_filled(head, 2.0, col);
+            // Region: tinted body, solid title band, rounded corners.
+            p.rect_filled(r, 5.0, lerp(Color32::from_rgb(0x1c, 0x1d, 0x21), col, 0.5));
+            let head = Rect::from_min_size(r.min, vec2(r.width(), 14.0));
+            p.rect_filled(head, egui::CornerRadius { nw: 5, ne: 5, sw: 0, se: 0 }, darken(col, 0.92));
+            p.rect_stroke(r, 5.0, Stroke::new(1.0_f32, darken(col, 0.45)), egui::StrokeKind::Inside);
             let mut label = ac.clip.name.clone();
             if ac.clip.link != 0 {
                 label = format!("∞ {label}");
@@ -623,15 +682,15 @@ impl App {
                         let nx = rx + n.step as f32 * pps;
                         let ny = body.bottom() - (n.pitch - lo) as f32 / span * (body.height() - 3.0) - 2.0;
                         let w = (n.len as f32 * pps - 1.0).max(1.5);
-                        pc.rect_filled(Rect::from_min_size(pos2(nx, ny - 1.0), vec2(w, 2.5)), 0.0, lerp(col, Color32::WHITE, 0.4));
+                        pc.rect_filled(Rect::from_min_size(pos2(nx, ny - 1.0), vec2(w, 2.5)), 1.0, lerp(col, Color32::WHITE, 0.6));
                     }
                 }
             }
             if playing_id == Some(ac.id) && self.status.playing {
-                p.rect_stroke(r, 2.0, Stroke::new(1.0_f32, PLAY), egui::StrokeKind::Inside);
+                p.rect_stroke(r, 5.0, Stroke::new(1.0_f32, PLAY), egui::StrokeKind::Inside);
             }
             if selected {
-                p.rect_stroke(r, 2.0, Stroke::new(1.5_f32, Color32::WHITE), egui::StrokeKind::Inside);
+                p.rect_stroke(r, 5.0, Stroke::new(1.5_f32, Color32::WHITE), egui::StrokeKind::Inside);
             }
             let resp = ui.interact(r.intersect(lanes), ui.id().with(("ac", ac.id)), Sense::click_and_drag());
             let near_edge = resp.hover_pos().is_some_and(|pos| (pos.x - r.right()).abs() < 6.0);

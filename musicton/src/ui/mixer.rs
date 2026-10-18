@@ -171,7 +171,7 @@ impl App {
         });
     }
 
-    fn channel_strip(&mut self, ui: &mut egui::Ui, r: Rect, sel: Sel, number: usize, slots: usize) {
+    pub(super) fn channel_strip(&mut self, ui: &mut egui::Ui, r: Rect, sel: Sel, number: usize, slots: usize) {
         let (name, color) = match sel {
             Sel::Track(id) => match self.project.track(id) {
                 Some(t) => (t.name.clone(), Color32::from_rgb(t.color[0], t.color[1], t.color[2])),

@@ -312,7 +312,7 @@ impl App {
         self.midi.learning.store(false, std::sync::atomic::Ordering::Relaxed);
         self.update_blocked_notes();
         self.touch();
-        self.toast(format!("Mapped {label} → {}", self.target_name(target)));
+        self.toast(format!("Mapped {label} to {}", self.target_name(target)));
     }
 
     /// Tells the MIDI thread which notes are mapped (they must not play the instrument).
@@ -339,7 +339,7 @@ impl App {
             egui::Grid::new("maps").striped(true).num_columns(4).show(ui, |ui| {
                 for (i, m) in self.project.mappings.clone().iter().enumerate() {
                     ui.label(m.source.label());
-                    ui.label("→");
+                    ui.label("to");
                     ui.label(self.target_name(m.target));
                     if ui.small_button("×").clicked() {
                         remove = Some(i);

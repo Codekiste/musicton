@@ -217,19 +217,43 @@ pub fn scrollbar(ui: &mut Ui, rect: Rect, id: impl std::hash::Hash, horizontal: 
     *offset != before
 }
 
-/// Square toggle button (mute/solo/arm/activator).
+/// Rounded toggle button with a soft gradient (mute/solo/arm/activator).
 pub fn toggle(ui: &mut Ui, text: &str, on: bool, on_color: Color32, size: egui::Vec2) -> Response {
     let (rect, resp) = ui.allocate_exact_size(size, Sense::click());
     let p = ui.painter();
-    let bg = if on { on_color } else if resp.hovered() { PANEL_LIGHT } else { PANEL_DARK };
-    p.rect_filled(rect, 2.0, bg);
-    p.rect_stroke(rect, 2.0, Stroke::new(1.0_f32, LINE), egui::StrokeKind::Inside);
+    let r = 4.0_f32.min(size.y / 2.0);
+    let (top, bottom) = if on {
+        (lighten(on_color, 0.18), darken(on_color, 0.85))
+    } else if resp.hovered() {
+        (Color32::from_rgb(0x4a, 0x4e, 0x57), Color32::from_rgb(0x3a, 0x3d, 0x44))
+    } else {
+        (Color32::from_rgb(0x3b, 0x3e, 0x45), Color32::from_rgb(0x2c, 0x2e, 0x33))
+    };
+    // Two-tone body: a lighter upper half gives the button some depth.
+    p.rect_filled(rect, r, bottom);
+    let ru = r as u8;
+    p.rect_filled(egui::Rect::from_min_max(rect.min, pos2(rect.right(), rect.center().y)), egui::CornerRadius { nw: ru, ne: ru, sw: 0, se: 0 }, lerp(top, bottom, 0.35));
+    p.rect_stroke(rect, r, Stroke::new(1.0_f32, if on { darken(on_color, 0.6) } else { Color32::from_rgb(0x16, 0x17, 0x1a) }), egui::StrokeKind::Inside);
     let fg = if on { on_color_text(on_color) } else { TEXT };
     if text == "●" {
-        p.circle_filled(rect.center(), 4.0, fg);
+        p.circle_filled(rect.center(), 4.0, if on { Color32::WHITE } else { REC });
     } else {
-        p.text(rect.center(), Align2::CENTER_CENTER, text, FontId::proportional(11.0), fg);
+        p.text(rect.center(), Align2::CENTER_CENTER, text, FontId::proportional(11.5), fg);
     }
+    resp
+}
+
+/// Round button (track header mute/solo/record).
+pub fn round_toggle(ui: &mut Ui, text: &str, on: bool, on_color: Color32, d: f32) -> Response {
+    let (rect, resp) = ui.allocate_exact_size(vec2(d, d), Sense::click());
+    let p = ui.painter();
+    let c = rect.center();
+    let rad = d / 2.0 - 0.5;
+    let fill = if on { on_color } else if resp.hovered() { Color32::from_rgb(0x4a, 0x4e, 0x57) } else { Color32::from_rgb(0x34, 0x37, 0x3d) };
+    p.circle_filled(c, rad, fill);
+    p.circle_filled(c - vec2(0.0, rad * 0.35), rad * 0.55, Color32::from_white_alpha(if on { 40 } else { 12 }));
+    p.circle_stroke(c, rad, Stroke::new(1.0_f32, Color32::from_rgb(0x14, 0x15, 0x18)));
+    p.text(c, Align2::CENTER_CENTER, text, FontId::proportional(d * 0.5), if on { on_color_text(on_color) } else { TEXT });
     resp
 }
 

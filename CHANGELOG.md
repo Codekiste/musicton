@@ -6,6 +6,11 @@ Das B-303-Plugin hat einen eigenen Changelog: [b303-plugin/CHANGELOG.md](b303-pl
 ## [Unreleased]
 
 ### Hinzugefügt
+- Neue Oberfläche:
+  - Schiefergraue Studio-Optik mit blauem Akzent, abgerundeten Bedienelementen und Verläufen
+  - Transportleiste mit LCD-Anzeige (Takt/Beat/Div/Tick, Zeit, Tempo zum Ziehen, Taktart, Tonart) und runden Transporttasten (Anfang, Stop, Play, Aufnahme, Cycle, Metronom)
+  - Inspector links mit Region- und Spur-Einstellungen, zwei Kanalzügen (gewählte Spur und Master) und Kurzhilfe; Browser rechts
+  - Timeline als Startansicht („Tracks“) mit neuen Spurköpfen (Nummer in Spurfarbe, runde M/S/R/A-Tasten, Lautstärke-Regler), abgerundeten Regionen und gelbem Cycle-Bereich
 - Mixer-Ansicht (Button „Mixer“, Strg+M): Kanalzüge in voller Höhe mit EQ-Anzeige, Instrument, Insert-Slots (Bypass, Reihenfolge, Entfernen, Hinzufügen), Send-Reglern, Output-Routing, Pan, großem Fader mit dB-Skala, Stereo-Meter mit Peak-Hold, Peak-Anzeige, Mute/Solo/Record und Spurname in Spurfarbe; Bereiche einzeln ein- und ausblendbar; per MCP mit `set_view view=mixer`
 
 - Rechtsklick-Menü am Spurkopf (Launcher, Timeline, Mixer):

@@ -9,6 +9,7 @@ mod clip_editor;
 mod composition_ui;
 mod devices;
 mod export;
+mod inspector;
 mod instruments_ui;
 mod mapping;
 mod mixer;
@@ -144,6 +145,7 @@ pub struct App {
     detail: Detail,
     show_browser: bool,
     show_info: bool,
+    show_inspector: bool,
     show_detail: bool,
     sel: Sel,
     sel_clip: Option<ClipRef>,
@@ -251,10 +253,11 @@ impl App {
             midi_tx,
             midi_rx,
             midi_ports: Midi::list_ports(),
-            view: View::Session,
+            view: View::Arrangement,
             detail: Detail::Devices,
             show_browser: true,
             show_info: true,
+            show_inspector: true,
             show_detail: true,
             sel,
             sel_clip: None,
@@ -1500,8 +1503,8 @@ impl eframe::App for App {
         self.handle_keys(ctx);
 
         egui::TopBottomPanel::top("transport")
-            .exact_height(34.0)
-            .frame(egui::Frame::default().fill(PANEL).inner_margin(egui::Margin::symmetric(6, 4)))
+            .exact_height(52.0)
+            .frame(egui::Frame::default().fill(PANEL).inner_margin(egui::Margin::symmetric(8, 6)))
             .show(ctx, |ui| self.transport_bar(ui));
 
         egui::TopBottomPanel::bottom("statusbar")
@@ -1509,12 +1512,19 @@ impl eframe::App for App {
             .frame(egui::Frame::default().fill(PANEL).inner_margin(egui::Margin::symmetric(8, 2)))
             .show(ctx, |ui| self.status_bar(ui));
 
+        if self.show_inspector {
+            egui::SidePanel::left("inspector")
+                .resizable(false)
+                .exact_width(inspector::INSPECTOR_W)
+                .frame(egui::Frame::default().fill(PANEL).inner_margin(egui::Margin::same(6)))
+                .show(ctx, |ui| self.inspector_panel(ui));
+        }
         if self.show_browser {
-            egui::SidePanel::left("browser")
+            egui::SidePanel::right("browser")
                 .resizable(true)
-                .default_width(210.0)
-                .width_range(160.0..=400.0)
-                .frame(egui::Frame::default().fill(PANEL).inner_margin(egui::Margin::same(4)))
+                .default_width(230.0)
+                .width_range(170.0..=420.0)
+                .frame(egui::Frame::default().fill(PANEL).inner_margin(egui::Margin::same(6)))
                 .show(ctx, |ui| self.browser_panel(ui));
         }
 
@@ -1526,7 +1536,8 @@ impl eframe::App for App {
                 .frame(egui::Frame::default().fill(BG).inner_margin(egui::Margin::same(3)))
                 .show(ctx, |ui| {
                     ui.horizontal_top(|ui| {
-                        if self.show_info {
+                        // Without the Inspector the quick help sits next to the editor.
+                        if self.show_info && !self.show_inspector {
                             egui::Frame::default().fill(PANEL).inner_margin(egui::Margin::same(8)).show(ui, |ui| {
                                 ui.set_width(180.0);
                                 ui.set_height(ui.available_height());

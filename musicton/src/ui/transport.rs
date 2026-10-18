@@ -5,31 +5,60 @@ use super::widgets;
 use super::{export, App, View};
 use crate::audio::engine::Cmd;
 use crate::midi::Midi;
-use crate::model::{MapTarget, SCALES, NOTE_NAMES, STEPS_PER_BAR};
+use crate::model::{MapTarget, NOTE_NAMES, SCALES, STEPS_PER_BAR};
 use egui::{pos2, vec2, Align2, FontId, Sense, Shape, Stroke};
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq)]
 enum Icon {
+    ToStart,
     Play,
     Stop,
     Rec,
+    Cycle,
+    Click,
 }
 
+/// Rounded transport button with a drawn symbol.
 fn icon_button(ui: &mut egui::Ui, icon: Icon, active: bool, color: egui::Color32) -> egui::Response {
-    let (rect, resp) = ui.allocate_exact_size(vec2(26.0, 22.0), Sense::click());
+    let (rect, resp) = ui.allocate_exact_size(vec2(34.0, 28.0), Sense::click());
     let p = ui.painter();
-    p.rect_filled(rect, 2.0, if resp.hovered() { PANEL_LIGHT } else { PANEL_DARK });
+    let (top, bottom) = if active && icon != Icon::Play && icon != Icon::Rec {
+        (lighten(color, 0.15), darken(color, 0.8))
+    } else if resp.hovered() {
+        (egui::Color32::from_rgb(0x4c, 0x50, 0x59), egui::Color32::from_rgb(0x38, 0x3b, 0x42))
+    } else {
+        (egui::Color32::from_rgb(0x3e, 0x41, 0x48), egui::Color32::from_rgb(0x2a, 0x2c, 0x31))
+    };
+    p.rect_filled(rect, 5.0, bottom);
+    p.rect_filled(egui::Rect::from_min_max(rect.min, pos2(rect.right(), rect.center().y)), egui::CornerRadius { nw: 5, ne: 5, sw: 0, se: 0 }, lerp(top, bottom, 0.3));
+    p.rect_stroke(rect, 5.0, Stroke::new(1.0_f32, egui::Color32::from_rgb(0x14, 0x15, 0x18)), egui::StrokeKind::Inside);
     let c = rect.center();
-    let col = if active { color } else { TEXT };
+    let on_bg = active && icon != Icon::Play && icon != Icon::Rec;
+    let col = if on_bg { egui::Color32::WHITE } else if active { color } else { TEXT };
     match icon {
+        Icon::ToStart => {
+            p.rect_filled(egui::Rect::from_center_size(c + vec2(-5.0, 0.0), vec2(2.0, 11.0)), 0.0, col);
+            p.add(Shape::convex_polygon(vec![c + vec2(5.0, -6.0), c + vec2(5.0, 6.0), c + vec2(-3.5, 0.0)], col, Stroke::NONE));
+        }
         Icon::Play => {
-            p.add(Shape::convex_polygon(vec![c + vec2(-5.0, -6.0), c + vec2(6.0, 0.0), c + vec2(-5.0, 6.0)], col, Stroke::NONE));
+            p.add(Shape::convex_polygon(vec![c + vec2(-5.0, -7.0), c + vec2(7.0, 0.0), c + vec2(-5.0, 7.0)], col, Stroke::NONE));
         }
         Icon::Stop => {
-            p.rect_filled(egui::Rect::from_center_size(c, vec2(10.0, 10.0)), 0.0, col);
+            p.rect_filled(egui::Rect::from_center_size(c, vec2(11.0, 11.0)), 1.5, col);
         }
         Icon::Rec => {
-            p.circle_filled(c, 5.5, if active { color } else { TEXT_DIM });
+            p.circle_filled(c, 6.5, if active { color } else { darken(REC, 0.8) });
+        }
+        Icon::Cycle => {
+            let st = Stroke::new(2.0_f32, col);
+            p.line_segment([c + vec2(-8.0, -3.0), c + vec2(6.0, -3.0)], st);
+            p.line_segment([c + vec2(8.0, 3.0), c + vec2(-6.0, 3.0)], st);
+            p.add(Shape::convex_polygon(vec![c + vec2(5.0, -7.0), c + vec2(9.0, -3.0), c + vec2(5.0, 1.0)], col, Stroke::NONE));
+            p.add(Shape::convex_polygon(vec![c + vec2(-5.0, 7.0), c + vec2(-9.0, 3.0), c + vec2(-5.0, -1.0)], col, Stroke::NONE));
+        }
+        Icon::Click => {
+            p.add(Shape::convex_polygon(vec![c + vec2(-6.0, 7.0), c + vec2(6.0, 7.0), c + vec2(2.5, -7.0), c + vec2(-2.5, -7.0)], egui::Color32::TRANSPARENT, Stroke::new(1.5_f32, col)));
+            p.line_segment([c + vec2(0.0, 4.0), c + vec2(5.0, -5.0)], Stroke::new(1.5_f32, col));
         }
     }
     resp
@@ -37,114 +66,120 @@ fn icon_button(ui: &mut egui::Ui, icon: Icon, active: bool, color: egui::Color32
 
 impl App {
     pub(super) fn transport_bar(&mut self, ui: &mut egui::Ui) {
+        let bar = ui.max_rect().expand2(vec2(8.0, 6.0));
+        gradient(ui.painter(), bar, egui::Color32::from_rgb(0x36, 0x39, 0x40), egui::Color32::from_rgb(0x25, 0x27, 0x2c));
+        ui.painter().line_segment([bar.left_bottom(), bar.right_bottom()], Stroke::new(1.0_f32, LINE));
         ui.horizontal_centered(|ui| {
-            let r = widgets::button(ui, "TAP", false);
+            ui.spacing_mut().item_spacing.x = 4.0;
+            ui.menu_button(egui::RichText::new("☰").size(16.0), |ui| self.main_menu(ui));
+            ui.add_space(4.0);
+            // Panels.
+            let r = widgets::toggle(ui, "Inspector", self.show_inspector, ACCENT, vec2(68.0, 24.0));
             if r.clicked() {
-                self.tap_tempo();
+                self.show_inspector = !self.show_inspector;
             }
-            self.hint(&r, "Tap Tempo", "Click repeatedly in time to set the tempo.");
-
-            let mut bpm = self.project.bpm;
-            let r = ui.add(egui::DragValue::new(&mut bpm).range(40.0..=300.0).speed(0.2).fixed_decimals(2).suffix(" BPM"));
-            if r.changed() {
-                self.project.bpm = bpm;
-                self.touch();
-            }
-            r.context_menu(|ui| self.map_menu(ui, MapTarget::Tempo, None));
-            self.hint(&r, "Tempo", "Song tempo in beats per minute. Drag or double-click to type.");
-
-            let mut swing = self.project.swing * 100.0;
-            let r = ui.add(egui::DragValue::new(&mut swing).range(0.0..=100.0).speed(0.5).fixed_decimals(0).prefix("Swing ").suffix("%"));
-            if r.changed() {
-                self.project.swing = swing / 100.0;
-                self.touch();
-            }
-            self.hint(&r, "Global Groove", "Swing amount applied to every 16th note offbeat.");
-
-            ui.label("4 / 4");
-            let r = widgets::toggle(ui, "Metro", self.metronome, ACCENT, vec2(42.0, 19.0));
+            self.hint(&r, "Inspector", "Shows or hides the Inspector on the left: clip settings, the channel strip of the selected track and the master, and the quick help.");
+            let r = widgets::toggle(ui, "Editor", self.detail_visible(), ACCENT, vec2(52.0, 24.0));
             if r.clicked() {
-                self.metronome = !self.metronome;
-                self.send(Cmd::Metronome(self.metronome));
+                self.toggle_detail();
             }
-            self.hint(&r, "Metronome", "Toggles the click track (M).");
-
-            let quants = [(0u32, "None"), (1, "1/16"), (4, "1/4"), (8, "1/2"), (16, "1 Bar"), (32, "2 Bars"), (64, "4 Bars")];
-            let cur = quants.iter().find(|q| q.0 == self.project.quant).map(|q| q.1).unwrap_or("1 Bar");
-            let r = egui::ComboBox::from_id_salt("quant")
-                .width(62.0)
-                .selected_text(cur)
-                .show_ui(ui, |ui| {
-                    for (v, name) in quants {
-                        if ui.selectable_label(self.project.quant == v, name).clicked() {
-                            self.project.quant = v;
-                            self.touch();
-                        }
-                    }
-                })
-                .response;
-            self.hint(&r, "Global Quantization", "Launched clips start on the next multiple of this value.");
-
-            ui.separator();
-
-            // Position display.
-            let pos = self.status.arr_pos.max(0.0) as u32;
-            let txt = format!("{:>3}. {}. {}", pos / STEPS_PER_BAR + 1, (pos % STEPS_PER_BAR) / 4 + 1, pos % 4 + 1);
-            let r = ui.add(egui::Label::new(egui::RichText::new(txt).monospace().size(13.0).color(ACCENT)).sense(Sense::click()));
-            self.hint(&r, "Timeline Position", "Current song position in bars, beats and sixteenths.");
-
-            let r = icon_button(ui, Icon::Play, self.status.playing, PLAY);
+            self.hint(&r, "Editor", "Shows or hides the editor at the bottom (notes or devices; Shift+Tab switches).");
+            let r = widgets::toggle(ui, "Browser", self.show_browser, ACCENT, vec2(60.0, 24.0));
             if r.clicked() {
-                self.send(Cmd::Play);
+                self.show_browser = !self.show_browser;
             }
-            r.context_menu(|ui| self.map_menu(ui, MapTarget::Play, None));
-            self.hint(&r, "Play", "Starts playback from the start marker (Space).");
+            self.hint(&r, "Browser", "Shows or hides the browser on the right with instruments, effects, clips, samples and plug-ins.");
+
+            // Transport, centred in the bar.
+            let lcd_w = 430.0;
+            let group_w = 6.0 * 38.0 + 12.0 + lcd_w + 150.0;
+            let free = ui.available_width() - 330.0;
+            ui.add_space(((free - group_w) / 2.0).max(8.0));
+            let r = icon_button(ui, Icon::ToStart, false, TEXT);
+            if r.clicked() {
+                self.send(Cmd::Stop);
+                self.send(Cmd::Stop);
+            }
+            self.hint(&r, "Go to Beginning", "Stops and moves the playhead back to the start.");
             let r = icon_button(ui, Icon::Stop, false, TEXT);
             if r.clicked() {
                 self.send(Cmd::Stop);
             }
             r.context_menu(|ui| self.map_menu(ui, MapTarget::Stop, None));
             self.hint(&r, "Stop", "Stops playback. Press again to return the start marker to the beginning.");
+            let r = icon_button(ui, Icon::Play, self.status.playing, PLAY);
+            if r.clicked() {
+                self.send(Cmd::Play);
+            }
+            r.context_menu(|ui| self.map_menu(ui, MapTarget::Play, None));
+            self.hint(&r, "Play", "Starts playback from the start marker (Space).");
             let r = icon_button(ui, Icon::Rec, self.rec, REC);
             if r.clicked() {
                 self.rec = !self.rec;
             }
             self.hint(&r, "Record", "When enabled, notes you play (computer keys or MIDI) are recorded into the playing clip of the selected track. If nothing is playing, a new clip is created (F9).");
-
-            let r = widgets::toggle(ui, "Timeline Rec", self.arr_rec, REC, vec2(50.0, 19.0));
-            if r.clicked() {
-                self.arr_rec = !self.arr_rec;
-            }
-            self.hint(&r, "Timeline Record", "Records your Launcher performance into the Timeline: every clip you launch is written onto the timeline at the current position.");
-
-            let r = widgets::button(ui, "Capture", false);
-            if r.clicked() {
-                self.capture_midi();
-            }
-            self.hint(&r, "Recall MIDI", "Turns what you just played on the selected track into a new clip - even if Record was off.");
-
-            ui.separator();
-            let r = widgets::toggle(ui, "Loop", self.project.loop_on, ACCENT, vec2(40.0, 19.0));
+            let r = icon_button(ui, Icon::Cycle, self.project.loop_on, CYCLE);
             if r.clicked() {
                 self.project.loop_on = !self.project.loop_on;
                 self.touch();
             }
-            self.hint(&r, "Timeline Loop", "Loops the arrangement between the loop brace start and end.");
-            let mut ls = self.project.loop_start / STEPS_PER_BAR + 1;
-            let mut ll = self.project.loop_len / STEPS_PER_BAR;
-            let r1 = ui.add(egui::DragValue::new(&mut ls).range(1..=999).speed(0.1));
-            let r2 = ui.add(egui::DragValue::new(&mut ll).range(1..=256).speed(0.1).suffix(" bars"));
-            if r1.changed() || r2.changed() {
-                self.project.loop_start = (ls - 1) * STEPS_PER_BAR;
-                self.project.loop_len = ll * STEPS_PER_BAR;
-                self.touch();
+            self.hint(&r, "Cycle", "Repeats the cycle region of the timeline (drag it in the ruler).");
+            let r = icon_button(ui, Icon::Click, self.metronome, ACCENT);
+            if r.clicked() {
+                self.metronome = !self.metronome;
+                self.send(Cmd::Metronome(self.metronome));
             }
-            self.hint(&r1, "Loop Start", "First bar of the loop.");
-            self.hint(&r2, "Loop Length", "Length of the loop in bars.");
-
+            self.hint(&r, "Metronome", "Toggles the click (M).");
+            ui.add_space(6.0);
+            self.lcd(ui, lcd_w);
+            ui.add_space(6.0);
+            ui.vertical(|ui| {
+                ui.spacing_mut().item_spacing.y = 2.0;
+                ui.horizontal(|ui| {
+                    let r = widgets::toggle(ui, "Tap", false, ACCENT, vec2(34.0, 18.0));
+                    if r.clicked() {
+                        self.tap_tempo();
+                    }
+                    self.hint(&r, "Tap Tempo", "Click repeatedly in time to set the tempo.");
+                    let r = widgets::toggle(ui, "Capture", false, ACCENT, vec2(56.0, 18.0));
+                    if r.clicked() {
+                        self.capture_midi();
+                    }
+                    self.hint(&r, "Capture", "Turns what you just played on the selected track into a new clip - even if Record was off.");
+                    let r = widgets::toggle(ui, "Rec Timeline", self.arr_rec, REC, vec2(84.0, 18.0));
+                    if r.clicked() {
+                        self.arr_rec = !self.arr_rec;
+                    }
+                    self.hint(&r, "Timeline Record", "Records your Launcher performance into the Timeline: every clip you launch is written onto the timeline at the current position.");
+                });
+                ui.horizontal(|ui| {
+                    let mut swing = self.project.swing * 100.0;
+                    let r = ui.add(egui::DragValue::new(&mut swing).range(0.0..=100.0).speed(0.5).fixed_decimals(0).prefix("Swing ").suffix("%"));
+                    if r.changed() {
+                        self.project.swing = swing / 100.0;
+                        self.touch();
+                    }
+                    self.hint(&r, "Swing", "Swing amount applied to every 16th note offbeat.");
+                    let quants = [(0u32, "Launch: None"), (1, "Launch: 1/16"), (4, "Launch: 1/4"), (8, "Launch: 1/2"), (16, "Launch: 1 Bar"), (32, "Launch: 2 Bars"), (64, "Launch: 4 Bars")];
+                    let cur = quants.iter().find(|q| q.0 == self.project.quant).map(|q| q.1).unwrap_or("Launch: 1 Bar");
+                    let r = egui::ComboBox::from_id_salt("quant")
+                        .width(96.0)
+                        .selected_text(cur)
+                        .show_ui(ui, |ui| {
+                            for (v, name) in quants {
+                                if ui.selectable_label(self.project.quant == v, name).clicked() {
+                                    self.project.quant = v;
+                                    self.touch();
+                                }
+                            }
+                        })
+                        .response;
+                    self.hint(&r, "Launch Quantization", "Launched clips start on the next multiple of this value.");
+                });
+            });
             let overridden = self.status.tracks.iter().any(|t| !t.follow_arr) && self.project.arrangement_end() > 0;
             if overridden {
-                let r = widgets::toggle(ui, "Back to Timeline", true, ACCENT, vec2(128.0, 19.0));
+                let r = widgets::toggle(ui, "Back to Timeline", true, ACCENT, vec2(116.0, 24.0));
                 if r.clicked() {
                     self.send(Cmd::BackToArrangement);
                 }
@@ -152,78 +187,111 @@ impl App {
             }
 
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                ui.menu_button("☰", |ui| self.main_menu(ui));
-                let r = widgets::toggle(ui, "I", self.show_info, BLUE, vec2(20.0, 19.0));
-                if r.clicked() {
-                    self.show_info = !self.show_info;
+                ui.spacing_mut().item_spacing.x = 0.0;
+                // View switch as one segmented control.
+                for (v, label, title, body) in [
+                    (View::Mixer, "Mixer", "Mixer", "Full mixer with channel strips (Ctrl+M)."),
+                    (View::Session, "Launcher", "Launcher", "Clip grid for jamming and live performance (Tab)."),
+                    (View::Arrangement, "Tracks", "Tracks", "The timeline with your tracks and regions (Tab)."),
+                ] {
+                    let r = widgets::toggle(ui, label, self.view == v, ACCENT, vec2(70.0, 24.0));
+                    if r.clicked() {
+                        self.view = v;
+                    }
+                    self.hint(&r, title, body);
                 }
-                self.hint(&r, "Help Panel", "Shows or hides this help panel.");
-                let r = widgets::toggle(ui, "Detail", self.detail_visible(), BLUE, vec2(42.0, 19.0));
-                if r.clicked() {
-                    self.toggle_detail();
-                }
-                self.hint(&r, "Editor Panel", "Shows or hides the Clip/Device view at the bottom.");
-                let r = widgets::toggle(ui, "Browser", self.show_browser, BLUE, vec2(54.0, 19.0));
-                if r.clicked() {
-                    self.show_browser = !self.show_browser;
-                }
-                self.hint(&r, "Browser", "Shows or hides the browser with instruments, effects, clips and samples.");
-
-                let r = widgets::toggle(ui, "Timeline", self.view == View::Arrangement, TEXT, vec2(80.0, 19.0));
-                if r.clicked() {
-                    self.view = View::Arrangement;
-                }
-                self.hint(&r, "Timeline", "Timeline view for building finished tracks (Tab).");
-                let r = widgets::toggle(ui, "Launcher", self.view == View::Session, TEXT, vec2(56.0, 19.0));
-                if r.clicked() {
-                    self.view = View::Session;
-                }
-                self.hint(&r, "Launcher", "Clip grid for jamming and live performance (Tab).");
-                let r = widgets::toggle(ui, "Mixer", self.view == View::Mixer, TEXT, vec2(46.0, 19.0));
-                if r.clicked() {
-                    self.view = View::Mixer;
-                }
-                self.hint(&r, "Mixer", "Full mixer with channel strips: EQ, inserts, sends, output, pan, faders and meters (Ctrl+M).");
-
-                ui.separator();
+                ui.add_space(10.0);
                 let cpu = (self.status.cpu * 100.0).min(999.0);
-                let r = ui.colored_label(if cpu > 80.0 { REC } else { TEXT_DIM }, format!("CPU {cpu:.0}%"));
+                let (rect, r) = ui.allocate_exact_size(vec2(64.0, 24.0), Sense::hover());
+                let p = ui.painter();
+                p.rect_filled(rect, 4.0, LCD_BG);
+                let fill = egui::Rect::from_min_size(rect.min + vec2(3.0, 15.0), vec2((rect.width() - 6.0) * (cpu / 100.0).clamp(0.0, 1.0), 5.0));
+                p.rect_filled(fill, 2.0, if cpu > 80.0 { REC } else { PLAY });
+                p.text(rect.left_top() + vec2(4.0, 2.0), Align2::LEFT_TOP, format!("CPU {cpu:.0}%"), FontId::proportional(10.0), LCD_TEXT);
                 self.hint(&r, "CPU Load", "How much of the available audio processing time is used.");
-                let mut key = self.project.key as usize;
-                let mut scale = self.project.scale;
-                let r = egui::ComboBox::from_id_salt("scale")
-                    .width(84.0)
-                    .selected_text(SCALES[scale.min(SCALES.len() - 1)].0)
-                    .show_ui(ui, |ui| {
-                        for (i, s) in SCALES.iter().enumerate() {
-                            ui.selectable_value(&mut scale, i, s.0);
-                        }
-                    })
-                    .response;
-                let r2 = egui::ComboBox::from_id_salt("key")
-                    .width(36.0)
-                    .selected_text(NOTE_NAMES[key % 12])
-                    .show_ui(ui, |ui| {
-                        for (i, n) in NOTE_NAMES.iter().enumerate() {
-                            ui.selectable_value(&mut key, i, *n);
-                        }
-                    })
-                    .response;
-                if key as u8 != self.project.key || scale != self.project.scale {
-                    self.project.key = key as u8;
-                    self.project.scale = scale;
-                    self.touch();
-                }
-                self.hint(&r, "Scale", "Highlights notes of this scale in the piano roll.");
-                self.hint(&r2, "Key", "Root note for the scale highlighting.");
             });
         });
-        // Simple level meter strip under the bar (master).
-        let rect = ui.max_rect();
+    }
+
+    /// The central display: position, time, tempo, signature and key.
+    fn lcd(&mut self, ui: &mut egui::Ui, w: f32) {
+        let (rect, _) = ui.allocate_exact_size(vec2(w, 40.0), Sense::hover());
+        let p = ui.painter().clone();
+        p.rect_filled(rect, 6.0, LCD_BG);
+        p.rect_stroke(rect, 6.0, Stroke::new(1.0_f32, egui::Color32::from_rgb(0x05, 0x07, 0x0a)), egui::StrokeKind::Inside);
+        gradient(&p, egui::Rect::from_min_max(rect.min + vec2(6.0, 1.0), pos2(rect.right() - 6.0, rect.top() + 8.0)), egui::Color32::from_white_alpha(10), egui::Color32::TRANSPARENT);
+        let dim = egui::Color32::from_rgb(0x5e, 0x77, 0x92);
+        let pos = self.status.arr_pos.max(0.0);
+        let step = pos as u32;
+        let cols = [rect.left() + 12.0, rect.left() + 186.0, rect.left() + 282.0, rect.left() + 352.0];
+        // Position.
+        // Bar, beat, sixteenth and tick, each in its own column so they never overlap.
+        let parts = [format!("{}", step / STEPS_PER_BAR + 1), format!("{}", (step % STEPS_PER_BAR) / 4 + 1), format!("{}", step % 4 + 1), format!("{:03}", ((pos.fract()) * 240.0) as u32 + 1)];
+        let xs = [44.0, 80.0, 108.0, 150.0];
+        for (i, (part, label)) in parts.iter().zip(["BAR", "BEAT", "DIV", "TICK"]).enumerate() {
+            let size = if i == 3 { 14.0 } else { 20.0 };
+            p.text(pos2(cols[0] + xs[i], rect.top() + if i == 3 { 8.0 } else { 3.0 }), Align2::RIGHT_TOP, part, FontId::monospace(size), LCD_TEXT);
+            p.text(pos2(cols[0] + xs[i], rect.bottom() - 3.0), Align2::RIGHT_BOTTOM, label, FontId::proportional(8.0), dim);
+        }
+        // Time.
+        let secs = pos as f64 * 60.0 / self.project.bpm as f64 / 4.0;
+        let t = format!("{:02}:{:02}.{}", (secs / 60.0) as u32, (secs % 60.0) as u32, ((secs.fract()) * 10.0) as u32);
+        p.text(pos2(cols[1], rect.top() + 7.0), Align2::LEFT_TOP, t, FontId::monospace(14.0), LCD_TEXT);
+        p.text(pos2(cols[1], rect.bottom() - 3.0), Align2::LEFT_BOTTOM, "TIME", FontId::proportional(8.5), dim);
+        // Tempo (drag to change, right-click to map).
+        let tr = egui::Rect::from_min_size(pos2(cols[2] - 12.0, rect.top() + 2.0), vec2(64.0, rect.height() - 4.0));
+        let resp = ui.interact(tr, ui.id().with("lcd_tempo"), Sense::click_and_drag());
+        if resp.dragged() {
+            let fine = ui.input(|i| i.modifiers.shift);
+            self.project.bpm = (self.project.bpm - resp.drag_delta().y * if fine { 0.02 } else { 0.25 }).clamp(40.0, 300.0);
+            self.touch();
+        }
+        if resp.double_clicked() {
+            self.project.bpm = self.project.bpm.round();
+            self.touch();
+        }
+        resp.context_menu(|ui| self.map_menu(ui, MapTarget::Tempo, None));
+        let tcol = if resp.hovered() || resp.dragged() { egui::Color32::WHITE } else { LCD_TEXT };
+        p.text(pos2(cols[2] - 12.0, rect.top() + 7.0), Align2::LEFT_TOP, format!("{:.2}", self.project.bpm), FontId::monospace(14.0), tcol);
+        p.text(pos2(cols[2] - 12.0, rect.bottom() - 3.0), Align2::LEFT_BOTTOM, "TEMPO", FontId::proportional(8.5), dim);
+        self.hint(&resp, "Tempo", "Drag up or down to change the tempo (Shift: fine), double-click to round it. Right-click to map it to a MIDI control.");
+        // Signature and key.
+        p.text(pos2(cols[3] - 4.0, rect.top() + 7.0), Align2::LEFT_TOP, "4/4", FontId::monospace(13.0), LCD_TEXT);
+        let kr = egui::Rect::from_min_size(pos2(cols[3] + 34.0, rect.top() + 2.0), vec2(rect.right() - cols[3] - 38.0, rect.height() - 4.0));
+        let kresp = ui.interact(kr, ui.id().with("lcd_key"), Sense::click());
+        let scale_name = SCALES[self.project.scale.min(SCALES.len() - 1)].0;
+        let short: String = scale_name.chars().take(3).collect();
+        p.text(pos2(kr.left(), rect.top() + 7.0), Align2::LEFT_TOP, format!("{} {}", NOTE_NAMES[self.project.key as usize % 12], short.to_lowercase()), FontId::monospace(13.0), if kresp.hovered() { egui::Color32::WHITE } else { LCD_TEXT });
+        p.text(pos2(cols[3] - 4.0, rect.bottom() - 3.0), Align2::LEFT_BOTTOM, "SIG", FontId::proportional(8.0), dim);
+        p.text(pos2(kr.left(), rect.bottom() - 3.0), Align2::LEFT_BOTTOM, "KEY", FontId::proportional(8.0), dim);
+        let popup = ui.make_persistent_id("lcd_key_popup");
+        if kresp.clicked() {
+            ui.memory_mut(|m| m.toggle_popup(popup));
+        }
+        egui::popup_below_widget(ui, popup, &kresp, egui::PopupCloseBehavior::CloseOnClickOutside, |ui| {
+            ui.set_min_width(220.0);
+            let mut key = self.project.key as usize;
+            let mut scale = self.project.scale;
+            ui.horizontal_wrapped(|ui| {
+                for (i, n) in NOTE_NAMES.iter().enumerate() {
+                    ui.selectable_value(&mut key, i, *n);
+                }
+            });
+            ui.separator();
+            for (i, sc) in SCALES.iter().enumerate() {
+                ui.selectable_value(&mut scale, i, sc.0);
+            }
+            if key as u8 != self.project.key || scale != self.project.scale {
+                self.project.key = key as u8;
+                self.project.scale = scale;
+                self.touch();
+            }
+        });
+        self.hint(&kresp, "Key and Scale", "Click to choose the key and scale (highlighted in the piano roll, used by the scale tools).");
+        // Master level under the display.
         let m = self.meter(super::MASTER_METER);
-        let w = rect.width() * ((crate::audio::dsp::gain_to_db(m[0].max(m[1])) + 60.0) / 60.0).clamp(0.0, 1.0);
-        ui.painter().rect_filled(egui::Rect::from_min_size(pos2(rect.left(), rect.bottom() + 2.0), vec2(w, 2.0)), 0.0, PLAY);
-        let _ = (Align2::LEFT_TOP, FontId::default());
+        let lvl = ((crate::audio::dsp::gain_to_db(m[0].max(m[1])) + 60.0) / 60.0).clamp(0.0, 1.0);
+        p.rect_filled(egui::Rect::from_min_size(pos2(rect.left() + 6.0, rect.bottom() - 2.5), vec2((rect.width() - 12.0) * lvl, 1.5)), 0.0, PLAY);
     }
 
     fn main_menu(&mut self, ui: &mut egui::Ui) {
