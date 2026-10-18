@@ -32,6 +32,8 @@ pub fn apply(ctx: &egui::Context) {
     style.spacing.interact_size.y = 18.0;
     // No text selection, so dragging from labels always means drag & drop.
     style.interaction.selectable_labels = false;
+    // Always-visible scroll bars (not the thin floating ones that only appear on hover).
+    style.spacing.scroll = egui::style::ScrollStyle { bar_width: 10.0, handle_min_length: 24.0, ..egui::style::ScrollStyle::solid() };
     let v = &mut style.visuals;
     *v = egui::Visuals::dark();
     v.panel_fill = PANEL;

@@ -29,9 +29,10 @@ Das B-303-Plugin hat einen eigenen Changelog: [b303-plugin/CHANGELOG.md](b303-pl
 - MCP: `track_action`, `clip_action` und `time_action` für alle Menüfunktionen
 
 ### Behoben
+- Horizontale Scrollbalken: Die Timeline hat jetzt Scrollbalken (horizontal und vertikal), alle anderen Bereiche zeigen ihre Balken dauerhaft statt nur beim Überfahren
 - Beim Kürzen eines Clips von vorne (überlappende Clips) beginnt der Rest jetzt an der richtigen Stelle im Inhalt
 - Bricht die Audioausgabe ab (Soundserver-Neustart, Interface getrennt), verbindet sich Musicton automatisch neu, statt die Fehlermeldung endlos ins Log zu schreiben
-- VST3-Plug-ins mit getrenntem Controller (z. B. Surge XT) zeigen ihren Editor: Component und Controller werden über Connection Points verbunden, der Host stellt Nachrichten (IMessage/IAttributeList) bereit
+- VST3-Plug-ins mit getrenntem Controller zeigen ihren Editor: Component und Controller werden über Connection Points verbunden, der Host stellt Nachrichten (IMessage/IAttributeList) bereit
 - Das Modulator-Panel dehnt sich nicht mehr über die ganze Device Chain aus
 - Entfernte oder ersetzte Plug-ins beenden ihren Sandbox-Prozess (vorher liefen die Prozesse bis zum Programmende weiter)
 

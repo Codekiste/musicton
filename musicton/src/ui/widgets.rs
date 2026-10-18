@@ -184,6 +184,39 @@ pub fn fader(ui: &mut Ui, value: &mut f32, level: [f32; 2], height: f32) -> Resp
     resp.on_hover_text(format!("{:.1} dB", gain_db))
 }
 
+/// Scroll bar for custom-drawn views. `offset` and `visible` are in the same units as `content`.
+/// Returns true when the offset changed.
+pub fn scrollbar(ui: &mut Ui, rect: Rect, id: impl std::hash::Hash, horizontal: bool, offset: &mut f32, visible: f32, content: f32) -> bool {
+    let p = ui.painter_at(rect);
+    p.rect_filled(rect, 0.0, PANEL_DARK);
+    let content = content.max(visible).max(1.0);
+    let len = if horizontal { rect.width() } else { rect.height() };
+    let handle_len = (visible / content * len).clamp(24.0_f32.min(len), len);
+    let travel = (len - handle_len).max(1.0);
+    let max_off = (content - visible).max(0.0);
+    let pos = if max_off > 0.0 { (*offset / max_off).clamp(0.0, 1.0) * travel } else { 0.0 };
+    let handle = if horizontal {
+        Rect::from_min_size(pos2(rect.left() + pos, rect.top() + 2.0), vec2(handle_len, rect.height() - 4.0))
+    } else {
+        Rect::from_min_size(pos2(rect.left() + 2.0, rect.top() + pos), vec2(rect.width() - 4.0, handle_len))
+    };
+    let resp = ui.interact(rect, ui.id().with(("scrollbar", id)), Sense::click_and_drag());
+    let before = *offset;
+    if resp.dragged() && max_off > 0.0 {
+        let d = if horizontal { resp.drag_delta().x } else { resp.drag_delta().y };
+        *offset = (*offset + d / travel * max_off).clamp(0.0, max_off);
+    } else if resp.clicked() && max_off > 0.0 {
+        // Click on the track: jump so the handle centres there.
+        if let Some(pt) = resp.interact_pointer_pos() {
+            let at = if horizontal { pt.x - rect.left() } else { pt.y - rect.top() };
+            *offset = ((at - handle_len / 2.0) / travel * max_off).clamp(0.0, max_off);
+        }
+    }
+    let col = if resp.dragged() { ACCENT } else if resp.hovered() { Color32::from_rgb(0x8a, 0x8a, 0x8a) } else { Color32::from_rgb(0x6a, 0x6a, 0x6a) };
+    p.rect_filled(handle, 4.0, col);
+    *offset != before
+}
+
 /// Square toggle button (mute/solo/arm/activator).
 pub fn toggle(ui: &mut Ui, text: &str, on: bool, on_color: Color32, size: egui::Vec2) -> Response {
     let (rect, resp) = ui.allocate_exact_size(size, Sense::click());

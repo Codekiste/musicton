@@ -12,6 +12,7 @@ use std::collections::HashMap;
 const HEADER_W: f32 = 176.0;
 const RULER_H: f32 = 32.0;
 const LANE_H: f32 = 54.0;
+const SCROLLBAR: f32 = 12.0;
 const AUTO_H: f32 = 56.0;
 
 #[derive(Clone, Copy, Debug)]
@@ -105,8 +106,10 @@ impl App {
     }
 
     pub(super) fn arrangement_view(&mut self, ui: &mut egui::Ui) {
-        let full = ui.available_rect_before_wrap();
-        ui.allocate_rect(full, Sense::hover());
+        let outer = ui.available_rect_before_wrap();
+        ui.allocate_rect(outer, Sense::hover());
+        // Room for the scroll bars at the bottom and right.
+        let full = Rect::from_min_max(outer.min, pos2(outer.right() - SCROLLBAR, outer.bottom() - SCROLLBAR));
         let ruler = Rect::from_min_max(pos2(full.left() + HEADER_W, full.top()), pos2(full.right(), full.top() + RULER_H));
         let video_h = if self.project.video.is_some() { super::video_ui::VIDEO_H } else { 0.0 };
         let top_h = RULER_H + MARK_H + SEC_H + CHORD_H + video_h;
@@ -145,7 +148,6 @@ impl App {
             }
         }
         let pps = self.arr.pps;
-        let sx = self.arr.scroll_x;
         let p = ui.painter().clone();
         p.rect_filled(full, 0.0, PANEL_DARK);
 
@@ -176,6 +178,21 @@ impl App {
         let content_bottom = y;
         let max_scroll = (content_bottom + self.arr.scroll_y - lanes.bottom() + 40.0).max(0.0);
         self.arr.scroll_y = self.arr.scroll_y.min(max_scroll);
+
+        // Scroll bars: horizontal over the song (plus room to keep writing), vertical over the tracks.
+        let visible_steps = lanes.width() / pps;
+        let song_end = self.project.arrangement_end().max(self.project.sections.iter().map(|s| s.start + s.len).max().unwrap_or(0)) as f32;
+        let content_steps = (song_end + 32.0 * 16.0).max(self.arr.scroll_x + visible_steps);
+        let hbar = Rect::from_min_max(pos2(lanes.left(), outer.bottom() - SCROLLBAR), pos2(lanes.right(), outer.bottom()));
+        if widgets::scrollbar(ui, hbar, "arr_h", true, &mut self.arr.scroll_x, visible_steps, content_steps) {
+            self.arr.follow = false;
+        }
+        let vbar = Rect::from_min_max(pos2(outer.right() - SCROLLBAR, lanes.top()), pos2(outer.right(), lanes.bottom()));
+        let content_h = max_scroll + lanes.height();
+        widgets::scrollbar(ui, vbar, "arr_v", false, &mut self.arr.scroll_y, lanes.height(), content_h);
+        ui.painter().rect_filled(Rect::from_min_max(pos2(outer.right() - SCROLLBAR, outer.bottom() - SCROLLBAR), outer.max), 0.0, PANEL);
+        ui.painter().rect_filled(Rect::from_min_max(pos2(outer.left(), outer.bottom() - SCROLLBAR), pos2(lanes.left(), outer.bottom())), 0.0, PANEL);
+        let sx = self.arr.scroll_x;
 
         // Grid.
         let lp = p.with_clip_rect(lanes);
