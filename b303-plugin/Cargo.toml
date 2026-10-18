@@ -1,0 +1,16 @@
+[package]
+name = "b303-plugin"
+description = "B-303 bassline as a VST3/CLAP plug-in"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+crate-type = ["cdylib", "lib"]
+
+[dependencies]
+b303-core = { path = "../crates/b303-core" }
+b303-gui = { path = "../crates/b303-gui" }
+nih_plug = { git = "https://github.com/robbert-vdh/nih-plug.git", rev = "de421011f41a6d10fc8c7a6084e4f4dee0143683" }
+nih_plug_egui = { git = "https://github.com/robbert-vdh/nih-plug.git", rev = "de421011f41a6d10fc8c7a6084e4f4dee0143683" }
+parking_lot = "0.12"

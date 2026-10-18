@@ -1,0 +1,3 @@
+[alias]
+# Bundles plug-ins: `cargo xtask bundle b303-plugin --release`
+xtask = "run --package xtask --release --"

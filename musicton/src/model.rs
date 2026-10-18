@@ -1,0 +1,903 @@
+//! Project data model. The UI owns a mutable `Project`; the audio engine receives immutable
+//! snapshots (`Arc<Project>`) whenever it changes.
+
+use crate::params::{self, ParamDef};
+use serde::{Deserialize, Serialize};
+
+pub const STEPS_PER_BAR: u32 = 16;
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
+pub enum InstrumentKind {
+    Drums,
+    Bass,
+    Synth,
+    Simpler,
+    Operator,
+    Wavetable,
+    Tension,
+    Audio,
+    Group,
+    B303,
+    Nexa,
+}
+
+impl InstrumentKind {
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Drums => "Drum Machine",
+            Self::Bass => "Acid Bass",
+            Self::Synth => "Poly Synth",
+            Self::Simpler => "Simpler",
+            Self::Operator => "Operator",
+            Self::Wavetable => "Wavetable",
+            Self::Tension => "Tension",
+            Self::Audio => "Audio Track",
+            Self::Group => "Group Track",
+            Self::B303 => "B-303 Bassline",
+            Self::Nexa => "Nexa",
+        }
+    }
+    pub const ALL: [InstrumentKind; 9] = [Self::Drums, Self::B303, Self::Bass, Self::Nexa, Self::Synth, Self::Simpler, Self::Operator, Self::Wavetable, Self::Tension];
+    pub fn info(self) -> &'static str {
+        match self {
+            Self::Drums => "Synthesized drum machine with ten lanes; every lane can also play a WAV sample.",
+            Self::Bass => "Monophonic 303-style bass with accent and slide.",
+            Self::Synth => "Subtractive polyphonic synthesizer with unison.",
+            Self::Simpler => "Sampler: play a WAV melodically (Classic), as one-shot, or chop it into slices across the keyboard (Slice).",
+            Self::Operator => "4-operator FM synthesizer with 8 algorithms - metallic bells, basses and plucks.",
+            Self::Wavetable => "Two morphing wavetable oscillators with unison, filter and an LFO on the table position.",
+            Self::Tension => "Physically modelled string (Karplus-Strong) with pluck, hammer or bow exciter.",
+            Self::Audio => "Plays audio clips (WAV loops and samples), warped to the song tempo.",
+            Self::Group => "Sums its member tracks into one channel with its own effects and fader.",
+            Self::B303 => "TB-303 style bassline: saw/square VCO, resonant diode-ladder style filter, accent with sweep circuit, slide - with a classic 16-step pattern editor.",
+            Self::Nexa => "Nexus-style ROMpler: browse ready-made trance/EDM sounds by category, shape them with macros, built-in arpeggiator, trancegate and effects.",
+        }
+    }
+    pub fn defs(self) -> &'static [ParamDef] {
+        match self {
+            Self::Drums => &params::DRUM_PARAMS,
+            Self::Bass => &params::BASS_PARAMS,
+            Self::Synth => &params::SYNTH_PARAMS,
+            Self::Simpler => &params::SIMPLER_PARAMS,
+            Self::Operator => &params::OPERATOR_PARAMS,
+            Self::Wavetable => &params::WAVETABLE_PARAMS,
+            Self::Tension => &params::TENSION_PARAMS,
+            Self::Audio | Self::Group => &[],
+            Self::B303 => &params::B303_PARAMS,
+            Self::Nexa => &params::NEXA_PARAMS,
+        }
+    }
+    /// Instruments whose clips are edited in the piano roll with a melodic range.
+    pub fn is_melodic(self) -> bool {
+        !matches!(self, Self::Drums | Self::Audio | Self::Group)
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
+pub enum DeviceKind {
+    AutoFilter,
+    Eq3,
+    Saturator,
+    Echo,
+    Reverb,
+    Compressor,
+    Limiter,
+    Sidechain,
+    Redux,
+    Utility,
+    AutoPan,
+    BeatRepeat,
+    Chorus,
+    Corpus,
+    DrumBuss,
+    DynamicTube,
+    Eq8,
+    Erosion,
+    FilterDelay,
+    Flanger,
+    FreqShifter,
+    Gate,
+    GlueCompressor,
+    GrainDelay,
+    Multiband,
+    Overdrive,
+    Pedal,
+    Phaser,
+    PingPong,
+    Resonators,
+    SimpleDelay,
+    Vinyl,
+    Spectrum,
+    Tuner,
+    Vocoder,
+    ChannelEq,
+}
+
+/// Browser folders for audio effect categories.
+pub const DEVICE_CATEGORIES: &[(&str, &[DeviceKind])] = &[
+    ("Delay & Loop", &[DeviceKind::BeatRepeat, DeviceKind::Echo, DeviceKind::FilterDelay, DeviceKind::GrainDelay, DeviceKind::PingPong, DeviceKind::SimpleDelay]),
+    ("Distortion", &[DeviceKind::DynamicTube, DeviceKind::Erosion, DeviceKind::Overdrive, DeviceKind::Pedal, DeviceKind::Redux, DeviceKind::Saturator, DeviceKind::Vinyl]),
+    ("Drums", &[DeviceKind::DrumBuss]),
+    ("Dynamics", &[DeviceKind::Compressor, DeviceKind::Gate, DeviceKind::GlueCompressor, DeviceKind::Limiter, DeviceKind::Multiband, DeviceKind::Sidechain]),
+    ("EQ & Filters", &[DeviceKind::AutoFilter, DeviceKind::ChannelEq, DeviceKind::Eq3, DeviceKind::Eq8]),
+    ("Modulation", &[DeviceKind::AutoPan, DeviceKind::Chorus, DeviceKind::Flanger, DeviceKind::FreqShifter, DeviceKind::Phaser]),
+    ("Reverb & Resonance", &[DeviceKind::Corpus, DeviceKind::Resonators, DeviceKind::Reverb, DeviceKind::Vocoder]),
+    ("Utilities", &[DeviceKind::Spectrum, DeviceKind::Tuner, DeviceKind::Utility]),
+];
+
+impl DeviceKind {
+    pub fn all() -> impl Iterator<Item = DeviceKind> {
+        DEVICE_CATEGORIES.iter().flat_map(|(_, k)| k.iter().copied())
+    }
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::AutoFilter => "Auto Filter",
+            Self::Eq3 => "EQ Three",
+            Self::Saturator => "Saturator",
+            Self::Echo => "Echo",
+            Self::Reverb => "Reverb",
+            Self::Compressor => "Compressor",
+            Self::Limiter => "Limiter",
+            Self::Sidechain => "Sidechain",
+            Self::Redux => "Redux",
+            Self::Utility => "Utility",
+            Self::AutoPan => "Auto Pan",
+            Self::BeatRepeat => "Beat Repeat",
+            Self::Chorus => "Chorus",
+            Self::Corpus => "Corpus",
+            Self::DrumBuss => "Drum Buss",
+            Self::DynamicTube => "Dynamic Tube",
+            Self::Eq8 => "EQ Eight",
+            Self::Erosion => "Erosion",
+            Self::FilterDelay => "Filter Delay",
+            Self::Flanger => "Flanger",
+            Self::FreqShifter => "Frequency Shifter",
+            Self::Gate => "Gate",
+            Self::GlueCompressor => "Glue Compressor",
+            Self::GrainDelay => "Grain Delay",
+            Self::Multiband => "Multiband Dynamics",
+            Self::Overdrive => "Overdrive",
+            Self::Pedal => "Pedal",
+            Self::Phaser => "Phaser",
+            Self::PingPong => "Ping Pong Delay",
+            Self::Resonators => "Resonators",
+            Self::SimpleDelay => "Simple Delay",
+            Self::Vinyl => "Vinyl Distortion",
+            Self::Spectrum => "Spectrum",
+            Self::Tuner => "Tuner",
+            Self::Vocoder => "Vocoder",
+            Self::ChannelEq => "Channel EQ",
+        }
+    }
+    pub fn info(self) -> &'static str {
+        match self {
+            Self::AutoFilter => "Resonant filter with a tempo-synced LFO. The classic tool for techno filter sweeps and builds.",
+            Self::Eq3 => "Three-band DJ-style EQ. Pull a band down to -24 dB to kill it completely.",
+            Self::Saturator => "Waveshaping distortion. Adds warmth, grit and perceived loudness.",
+            Self::Echo => "Tempo-synced stereo ping-pong delay with filters in the feedback path.",
+            Self::Reverb => "Algorithmic reverb. Long tails with a low cut make deep warehouse spaces.",
+            Self::Compressor => "Dynamics compressor. Glues sounds together and tames peaks.",
+            Self::Limiter => "Fast peak limiter for the master. Raise Gain for loudness, Ceiling sets the maximum level.",
+            Self::Sidechain => "Ducks the track every time a kick plays - the pumping techno sound.",
+            Self::Redux => "Bit and sample-rate reduction for lo-fi crunch.",
+            Self::Utility => "Gain, pan, stereo width and a low cut to clean up non-bass tracks.",
+            Self::AutoPan => "Tempo-synced LFO on volume and panning. Phase 180° = auto pan, 0° = tremolo.",
+            Self::BeatRepeat => "Captures a slice of the incoming audio and repeats it in rhythm - stutters, rolls and glitches. Chance sets how often it triggers.",
+            Self::Chorus => "Modulated short delays that thicken and widen sounds.",
+            Self::Corpus => "Simulates the resonance of physical objects (beams, membranes, pipes...). Great on percussion.",
+            Self::DrumBuss => "All-in-one drum processor: drive, crunch, transient shaping and a tuned low-end Boom.",
+            Self::DynamicTube => "Tube saturation with bias - warm, asymmetric distortion.",
+            Self::Eq8 => "Eight-band parametric EQ with cuts, shelves, bells and a notch. Drag the dots in the display.",
+            Self::Erosion => "Degrades the sound with modulated micro-delays driven by noise or a sine wave.",
+            Self::FilterDelay => "Three independent filtered delay lines: left, stereo and right.",
+            Self::Flanger => "Short modulated delay with feedback for jet-like sweeps.",
+            Self::FreqShifter => "Shifts all frequencies by a fixed amount (inharmonic) or ring-modulates the signal.",
+            Self::Gate => "Mutes the signal below the threshold. Tightens drums and removes noise.",
+            Self::GlueCompressor => "Bus compressor modelled on classic console designs - glues groups and the master together.",
+            Self::GrainDelay => "Splits the delayed signal into grains with random spray and pitch.",
+            Self::Multiband => "Three-band compressor/expander with upward and downward compression (OTT style).",
+            Self::Overdrive => "Band-limited overdrive like a guitar pedal.",
+            Self::Pedal => "Guitar pedal distortion: overdrive, distortion and fuzz with a 3-band EQ.",
+            Self::Phaser => "Sweeping all-pass filter phaser.",
+            Self::PingPong => "Delay bouncing between left and right through a band-pass filter.",
+            Self::Resonators => "Five tuned resonators that turn any input into chords.",
+            Self::SimpleDelay => "Basic stereo delay with separate left and right times.",
+            Self::Vinyl => "Record-player artefacts: tracing distortion, pinch and crackle.",
+            Self::Spectrum => "Real-time frequency analyser.",
+            Self::Tuner => "Shows the pitch of the incoming audio.",
+            Self::Vocoder => "Imposes the spectrum of the track onto an internal saw, pulse or noise carrier - robot voices and talking synths.",
+            Self::ChannelEq => "Simple, musical channel-strip EQ with low, sweepable mid and high bands.",
+        }
+    }
+    pub fn defs(self) -> &'static [ParamDef] {
+        match self {
+            Self::AutoFilter => &params::AUTOFILTER_PARAMS,
+            Self::Eq3 => &params::EQ3_PARAMS,
+            Self::Saturator => &params::SATURATOR_PARAMS,
+            Self::Echo => &params::ECHO_PARAMS,
+            Self::Reverb => &params::REVERB_PARAMS,
+            Self::Compressor => &params::COMPRESSOR_PARAMS,
+            Self::Limiter => &params::LIMITER_PARAMS,
+            Self::Sidechain => &params::SIDECHAIN_PARAMS,
+            Self::Redux => &params::REDUX_PARAMS,
+            Self::Utility => &params::UTILITY_PARAMS,
+            Self::AutoPan => &params::AUTOPAN_PARAMS,
+            Self::BeatRepeat => &params::BEATREPEAT_PARAMS,
+            Self::Chorus => &params::CHORUS_PARAMS,
+            Self::Corpus => &params::CORPUS_PARAMS,
+            Self::DrumBuss => &params::DRUMBUSS_PARAMS,
+            Self::DynamicTube => &params::DYNTUBE_PARAMS,
+            Self::Eq8 => &params::EQ8_PARAMS,
+            Self::Erosion => &params::EROSION_PARAMS,
+            Self::FilterDelay => &params::FILTERDELAY_PARAMS,
+            Self::Flanger => &params::FLANGER_PARAMS,
+            Self::FreqShifter => &params::FREQSHIFT_PARAMS,
+            Self::Gate => &params::GATE_PARAMS,
+            Self::GlueCompressor => &params::GLUE_PARAMS,
+            Self::GrainDelay => &params::GRAINDELAY_PARAMS,
+            Self::Multiband => &params::MULTIBAND_PARAMS,
+            Self::Overdrive => &params::OVERDRIVE_PARAMS,
+            Self::Pedal => &params::PEDAL_PARAMS,
+            Self::Phaser => &params::PHASER_PARAMS,
+            Self::PingPong => &params::PINGPONG_PARAMS,
+            Self::Resonators => &params::RESONATORS_PARAMS,
+            Self::SimpleDelay => &params::SIMPLEDELAY_PARAMS,
+            Self::Vinyl => &params::VINYL_PARAMS,
+            Self::Spectrum => &params::SPECTRUM_PARAMS,
+            Self::Tuner => &params::TUNER_PARAMS,
+            Self::Vocoder => &params::VOCODER_PARAMS,
+            Self::ChannelEq => &params::CHANNELEQ_PARAMS,
+        }
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
+pub enum MidiFxKind {
+    Arpeggiator,
+    Chord,
+    NoteLength,
+    Pitch,
+    Random,
+    Scale,
+    Velocity,
+}
+
+impl MidiFxKind {
+    pub const ALL: [MidiFxKind; 7] = [Self::Arpeggiator, Self::Chord, Self::NoteLength, Self::Pitch, Self::Random, Self::Scale, Self::Velocity];
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Arpeggiator => "Arpeggiator",
+            Self::Chord => "Chord",
+            Self::NoteLength => "Note Length",
+            Self::Pitch => "Pitch",
+            Self::Random => "Random",
+            Self::Scale => "Scale",
+            Self::Velocity => "Velocity",
+        }
+    }
+    pub fn info(self) -> &'static str {
+        match self {
+            Self::Arpeggiator => "Plays held notes one after another in a pattern. Works on clip notes and on what you play (while the transport runs).",
+            Self::Chord => "Adds up to six notes at fixed intervals to every note - instant chords from single notes.",
+            Self::NoteLength => "Sets every note to a fixed length (Sync) or scales its length (Gate).",
+            Self::Pitch => "Transposes notes and drops those outside the Lowest/Highest range.",
+            Self::Random => "Randomly transposes notes - great for generative melodies.",
+            Self::Scale => "Forces every note into the chosen key and scale. No wrong notes.",
+            Self::Velocity => "Reshapes, limits or randomizes note velocities.",
+        }
+    }
+    pub fn defs(self) -> &'static [ParamDef] {
+        match self {
+            Self::Arpeggiator => &params::ARP_PARAMS,
+            Self::Chord => &params::CHORD_PARAMS,
+            Self::NoteLength => &params::NOTELENGTH_PARAMS,
+            Self::Pitch => &params::PITCH_PARAMS,
+            Self::Random => &params::RANDOM_PARAMS,
+            Self::Scale => &params::SCALE_PARAMS,
+            Self::Velocity => &params::VELOCITY_PARAMS,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct MidiFx {
+    pub id: u64,
+    pub kind: MidiFxKind,
+    pub on: bool,
+    pub params: Vec<f32>,
+}
+
+impl MidiFx {
+    pub fn new(id: u64, kind: MidiFxKind) -> Self {
+        Self { id, kind, on: true, params: params::defaults(kind.defs()) }
+    }
+}
+
+pub use b303_core::{SeqBank, SeqPattern, SeqStep};
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Instrument {
+    pub kind: InstrumentKind,
+    pub params: Vec<f32>,
+    /// Drum machine only: optional WAV file per lane replacing the synthesized sound.
+    #[serde(default)]
+    pub samples: Vec<Option<String>>,
+    /// B-303 only: internal sequencer patterns.
+    #[serde(default)]
+    pub bank: Option<SeqBank>,
+}
+
+impl Instrument {
+    pub fn new(kind: InstrumentKind) -> Self {
+        let samples = match kind {
+            InstrumentKind::Drums => vec![None; params::DRUM_LANES.len()],
+            InstrumentKind::Simpler => vec![None],
+            _ => vec![],
+        };
+        let bank = (kind == InstrumentKind::B303).then(SeqBank::factory);
+        Self { kind, params: params::defaults(kind.defs()), samples, bank }
+    }
+    pub fn normalize(&mut self) {
+        normalize_params(&mut self.params, self.kind.defs());
+        match self.kind {
+            InstrumentKind::Drums => self.samples.resize(params::DRUM_LANES.len(), None),
+            InstrumentKind::Simpler => self.samples.resize(1, None),
+            InstrumentKind::B303 if self.bank.is_none() => self.bank = Some(SeqBank::factory()),
+            _ => {}
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Device {
+    pub id: u64,
+    pub kind: DeviceKind,
+    pub on: bool,
+    pub params: Vec<f32>,
+}
+
+impl Device {
+    pub fn new(id: u64, kind: DeviceKind) -> Self {
+        Self { id, kind, on: true, params: params::defaults(kind.defs()) }
+    }
+    pub fn with(mut self, idx: usize, v: f32) -> Self {
+        self.params[idx] = v;
+        self
+    }
+}
+
+fn normalize_params(p: &mut Vec<f32>, defs: &[ParamDef]) {
+    if p.len() < defs.len() {
+        p.extend(defs[p.len()..].iter().map(|d| d.def));
+    }
+    p.truncate(defs.len());
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Channel {
+    pub devices: Vec<Device>,
+    /// Fader position 0..1 (0.85 = 0 dB).
+    pub volume: f32,
+    pub pan: f32,
+    pub mute: bool,
+    pub solo: bool,
+    pub sends: [f32; 2],
+    /// Crossfader assignment: 0 = none, 1 = A, 2 = B.
+    #[serde(default)]
+    pub xfade: u8,
+}
+
+impl Default for Channel {
+    fn default() -> Self {
+        Self { devices: vec![], volume: 0.85, pan: 0.0, mute: false, solo: false, sends: [0.0, 0.0], xfade: 0 }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct Note {
+    pub step: u32,
+    pub len: u32,
+    pub pitch: u8,
+    pub vel: u8,
+    #[serde(default)]
+    pub slide: bool,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
+pub enum WarpMode {
+    /// Plays at the original speed, not synced to the tempo.
+    Off,
+    /// Changes playback speed (and pitch) to follow the tempo, like a turntable.
+    Repitch,
+    /// Granular time-stretch: follows the tempo and keeps the pitch.
+    Beats,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct AudioClip {
+    pub path: String,
+    pub warp: WarpMode,
+    /// Original tempo of the material (used when warping).
+    pub bpm: f32,
+    pub gain: f32,
+    pub transpose: f32,
+    /// Start offset into the file in seconds.
+    #[serde(default)]
+    pub offset: f32,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Clip {
+    pub name: String,
+    pub color: [u8; 3],
+    pub len: u32,
+    pub notes: Vec<Note>,
+    #[serde(default)]
+    pub audio: Option<AudioClip>,
+    #[serde(default)]
+    pub follow: Option<Follow>,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
+pub enum FollowAction {
+    Next,
+    Previous,
+    First,
+    Last,
+    Any,
+    Other,
+    Again,
+    Stop,
+}
+
+impl FollowAction {
+    pub const ALL: [FollowAction; 8] = [Self::Next, Self::Previous, Self::First, Self::Last, Self::Any, Self::Other, Self::Again, Self::Stop];
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Next => "Next",
+            Self::Previous => "Previous",
+            Self::First => "First",
+            Self::Last => "Last",
+            Self::Any => "Any",
+            Self::Other => "Other",
+            Self::Again => "Play Again",
+            Self::Stop => "Stop",
+        }
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Debug, Serialize, Deserialize)]
+pub struct Follow {
+    pub action: FollowAction,
+    /// Bars after which the action fires.
+    pub bars: u32,
+    /// Probability 0..1 that the action happens (otherwise the clip keeps looping).
+    pub chance: f32,
+}
+
+impl Clip {
+    /// Builds an audio clip, guessing the loop tempo from the file length.
+    pub fn from_audio(path: &str, frames: usize, sample_rate: f32, project_bpm: f32, color: [u8; 3]) -> Self {
+        let secs = frames as f32 / sample_rate.max(1.0);
+        let name = std::path::Path::new(path).file_stem().map(|f| f.to_string_lossy().to_string()).unwrap_or_else(|| "Audio".into());
+        // Loops: find a bar count that gives a plausible tempo near the project tempo.
+        let mut best: Option<(f32, u32)> = None;
+        for bars in [1u32, 2, 4, 8, 16, 32] {
+            let bpm = bars as f32 * 4.0 * 60.0 / secs;
+            if (70.0..=190.0).contains(&bpm) {
+                let score = (bpm - project_bpm).abs();
+                if best.is_none_or(|(b, _)| score < (b - project_bpm).abs()) {
+                    best = Some((bpm, bars));
+                }
+            }
+        }
+        let lower = name.to_lowercase();
+        let looks_like_loop = lower.contains("loop") || lower.contains("bpm") || secs >= 4.0;
+        let (warp, bpm, len) = match best {
+            Some((bpm, bars)) if looks_like_loop => (WarpMode::Beats, bpm, bars * STEPS_PER_BAR),
+            _ => {
+                let steps = (secs * project_bpm / 60.0 * 4.0).ceil().max(1.0) as u32;
+                (WarpMode::Off, project_bpm, steps.div_ceil(4) * 4)
+            }
+        };
+        Self {
+            name,
+            color,
+            len,
+            notes: vec![],
+            audio: Some(AudioClip { path: path.into(), warp, bpm, gain: 0.0, transpose: 0.0, offset: 0.0 }),
+            follow: None,
+        }
+    }
+
+    pub fn new(name: &str, color: [u8; 3], bars: u32) -> Self {
+        Self { name: name.into(), color, len: bars * STEPS_PER_BAR, notes: vec![], audio: None, follow: None }
+    }
+    pub fn bars(&self) -> u32 {
+        self.len.div_ceil(STEPS_PER_BAR)
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Scene {
+    pub name: String,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
+pub enum AutoTarget {
+    Volume,
+    Pan,
+    Send(u8),
+    Instrument(usize),
+    Device { id: u64, param: usize },
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Automation {
+    pub target: AutoTarget,
+    /// (position in steps, normalized value 0..1), sorted by position.
+    pub points: Vec<(f32, f32)>,
+}
+
+impl Automation {
+    pub fn value_at(&self, pos: f32) -> Option<f32> {
+        let pts = &self.points;
+        let first = pts.first()?;
+        if pos <= first.0 {
+            return Some(first.1);
+        }
+        for w in pts.windows(2) {
+            let (a, b) = (w[0], w[1]);
+            if pos <= b.0 {
+                let t = if b.0 > a.0 { (pos - a.0) / (b.0 - a.0) } else { 1.0 };
+                return Some(a.1 + (b.1 - a.1) * t);
+            }
+        }
+        Some(pts.last().unwrap().1)
+    }
+}
+
+/// Anything a MIDI controller, a computer key or a macro can control.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Serialize, Deserialize)]
+pub enum MapTarget {
+    Volume(u64),
+    Pan(u64),
+    Send(u64, u8),
+    Mute(u64),
+    Solo(u64),
+    Instrument(u64, usize),
+    Device(u64, usize),
+    MidiFx(u64, usize),
+    Macro(u64, u8),
+    ReturnVolume(u8),
+    MasterVolume,
+    Crossfader,
+    Tempo,
+    LaunchScene(usize),
+    LaunchClip(u64, usize),
+    StopTrack(u64),
+    StopAll,
+    Play,
+    Stop,
+}
+
+impl MapTarget {
+    /// Buttons fire on press; everything else is continuous.
+    pub fn is_trigger(self) -> bool {
+        matches!(self, Self::LaunchScene(_) | Self::LaunchClip(..) | Self::StopTrack(_) | Self::StopAll | Self::Play | Self::Stop | Self::Mute(_) | Self::Solo(_))
+    }
+}
+
+#[derive(Clone, PartialEq, Eq, Hash, Debug, Serialize, Deserialize)]
+pub enum MapSource {
+    Cc { ch: u8, cc: u8 },
+    Note { ch: u8, note: u8 },
+    Key(String),
+}
+
+impl MapSource {
+    pub fn label(&self) -> String {
+        match self {
+            Self::Cc { ch, cc } => format!("CC {cc} (ch {})", ch + 1),
+            Self::Note { ch, note } => format!("Note {} (ch {})", note_name(*note), ch + 1),
+            Self::Key(k) => format!("Key {k}"),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Mapping {
+    pub source: MapSource,
+    pub target: MapTarget,
+    pub min: f32,
+    pub max: f32,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct Macro {
+    pub name: String,
+    pub value: f32,
+    /// Mapped parameters with their range (normalized 0..1).
+    pub targets: Vec<(MapTarget, f32, f32)>,
+}
+
+pub fn default_macros() -> Vec<Macro> {
+    (1..=8).map(|i| Macro { name: format!("Macro {i}"), value: 0.0, targets: vec![] }).collect()
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ArrClip {
+    pub id: u64,
+    /// Start in steps (16ths) on the timeline.
+    pub start: u32,
+    /// Length on the timeline in steps; the clip loops if this exceeds `clip.len`.
+    pub len: u32,
+    pub clip: Clip,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Track {
+    pub id: u64,
+    pub name: String,
+    pub color: [u8; 3],
+    pub instrument: Instrument,
+    pub channel: Channel,
+    pub clips: Vec<Option<Clip>>,
+    #[serde(default)]
+    pub arrangement: Vec<ArrClip>,
+    #[serde(default)]
+    pub automation: Vec<Automation>,
+    #[serde(default)]
+    pub midi_fx: Vec<MidiFx>,
+    #[serde(default = "default_macros")]
+    pub macros: Vec<Macro>,
+    /// Audio tracks: armed for recording from the audio input.
+    #[serde(default)]
+    pub arm: bool,
+    /// Group track this track belongs to.
+    #[serde(default)]
+    pub group: Option<u64>,
+    /// Group tracks: members hidden in the Session View.
+    #[serde(default)]
+    pub folded: bool,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ReturnTrack {
+    pub name: String,
+    pub color: [u8; 3],
+    pub channel: Channel,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Project {
+    pub name: String,
+    pub bpm: f32,
+    pub swing: f32,
+    /// Launch quantization in steps (0 = none).
+    pub quant: u32,
+    pub tracks: Vec<Track>,
+    pub returns: Vec<ReturnTrack>,
+    pub master: Channel,
+    pub scenes: Vec<Scene>,
+    pub loop_on: bool,
+    pub loop_start: u32,
+    pub loop_len: u32,
+    pub next_id: u64,
+    #[serde(default = "default_key")]
+    pub key: u8,
+    #[serde(default)]
+    pub scale: usize,
+    #[serde(default)]
+    pub mappings: Vec<Mapping>,
+    /// -1 = full A, 0 = center, 1 = full B.
+    #[serde(default)]
+    pub crossfader: f32,
+}
+
+fn default_key() -> u8 {
+    9
+}
+
+pub const CLIP_COLORS: [[u8; 3]; 24] = [
+    [0xff, 0x94, 0xa6], [0xff, 0xa5, 0x29], [0xcc, 0x99, 0x27], [0xf7, 0xf4, 0x7c],
+    [0xbf, 0xfb, 0x00], [0x1a, 0xff, 0x2f], [0x25, 0xff, 0xa8], [0x5c, 0xff, 0xe8],
+    [0x8b, 0xc5, 0xff], [0x54, 0x80, 0xe4], [0x92, 0xa7, 0xff], [0xd8, 0x6c, 0xe4],
+    [0xe5, 0x53, 0xa0], [0xff, 0xff, 0xff], [0xff, 0x36, 0x36], [0xf6, 0x6c, 0x03],
+    [0x99, 0x72, 0x4b], [0xff, 0xf0, 0x34], [0x87, 0xff, 0x67], [0x3d, 0xc3, 0x00],
+    [0x00, 0xbf, 0xaf], [0x19, 0xe9, 0xff], [0x10, 0xa4, 0xee], [0x7c, 0x4b, 0xff],
+];
+
+pub const SCALES: &[(&str, &[u8])] = &[
+    ("Chromatic", &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]),
+    ("Minor", &[0, 2, 3, 5, 7, 8, 10]),
+    ("Major", &[0, 2, 4, 5, 7, 9, 11]),
+    ("Dorian", &[0, 2, 3, 5, 7, 9, 10]),
+    ("Phrygian", &[0, 1, 3, 5, 7, 8, 10]),
+    ("Harmonic Minor", &[0, 2, 3, 5, 7, 8, 11]),
+    ("Minor Pentatonic", &[0, 3, 5, 7, 10]),
+];
+
+pub const NOTE_NAMES: [&str; 12] = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+
+pub fn note_name(p: u8) -> String {
+    format!("{}{}", NOTE_NAMES[(p % 12) as usize], p as i32 / 12 - 2)
+}
+
+impl Project {
+    pub fn empty() -> Self {
+        Self {
+            name: "Untitled".into(),
+            bpm: 130.0,
+            swing: 0.0,
+            quant: STEPS_PER_BAR,
+            tracks: vec![],
+            returns: vec![
+                ReturnTrack {
+                    name: "A Reverb".into(),
+                    color: [0xd8, 0x6c, 0xe4],
+                    channel: Channel {
+                        devices: vec![Device::new(1, DeviceKind::Reverb).with(5, 1.0)],
+                        ..Default::default()
+                    },
+                },
+                ReturnTrack {
+                    name: "B Delay".into(),
+                    color: [0x8b, 0xc5, 0xff],
+                    channel: Channel {
+                        devices: vec![Device::new(2, DeviceKind::Echo).with(5, 1.0)],
+                        ..Default::default()
+                    },
+                },
+            ],
+            master: Channel {
+                devices: vec![Device::new(3, DeviceKind::Compressor)
+                    .with(0, -12.0)
+                    .with(1, 2.0)
+                    .with(2, 0.02)
+                    .with(4, 1.0),
+                    Device::new(4, DeviceKind::Limiter)],
+                ..Default::default()
+            },
+            scenes: (1..=8).map(|i| Scene { name: i.to_string() }).collect(),
+            loop_on: false,
+            loop_start: 0,
+            loop_len: 8 * STEPS_PER_BAR,
+            next_id: 100,
+            key: 9,
+            scale: 1,
+            mappings: vec![],
+            crossfader: 0.0,
+        }
+    }
+
+    pub fn new_id(&mut self) -> u64 {
+        self.next_id += 1;
+        self.next_id
+    }
+
+    pub fn track(&self, id: u64) -> Option<&Track> {
+        self.tracks.iter().find(|t| t.id == id)
+    }
+    pub fn track_mut(&mut self, id: u64) -> Option<&mut Track> {
+        self.tracks.iter_mut().find(|t| t.id == id)
+    }
+    pub fn track_index(&self, id: u64) -> Option<usize> {
+        self.tracks.iter().position(|t| t.id == id)
+    }
+
+    pub fn add_track(&mut self, name: &str, kind: InstrumentKind, color: [u8; 3]) -> u64 {
+        let id = self.new_id();
+        self.tracks.push(Track {
+            id,
+            name: name.into(),
+            color,
+            instrument: Instrument::new(kind),
+            channel: Channel::default(),
+            clips: vec![None; self.scenes.len()],
+            arrangement: vec![],
+            automation: vec![],
+            midi_fx: vec![],
+            macros: default_macros(),
+            arm: false,
+            group: None,
+            folded: false,
+        });
+        id
+    }
+
+    pub fn add_scene(&mut self, at: usize) {
+        self.scenes.insert(at, Scene { name: (self.scenes.len() + 1).to_string() });
+        for t in &mut self.tracks {
+            t.clips.insert(at, None);
+        }
+    }
+
+    pub fn remove_scene(&mut self, at: usize) {
+        if self.scenes.len() <= 1 {
+            return;
+        }
+        self.scenes.remove(at);
+        for t in &mut self.tracks {
+            t.clips.remove(at);
+        }
+    }
+
+    /// Whether a track is audible considering solo (a soloed group keeps its members audible).
+    pub fn solo_ok(&self, t: &Track) -> bool {
+        if !self.any_solo() || t.channel.solo {
+            return true;
+        }
+        if let Some(g) = t.group.and_then(|g| self.track(g)) {
+            if g.channel.solo {
+                return true;
+            }
+        }
+        // A group stays audible if one of its members is soloed.
+        t.instrument.kind == InstrumentKind::Group && self.tracks.iter().any(|m| m.group == Some(t.id) && m.channel.solo)
+    }
+
+    pub fn any_solo(&self) -> bool {
+        self.tracks.iter().any(|t| t.channel.solo) || self.returns.iter().any(|r| r.channel.solo)
+    }
+
+    /// End of the arrangement in steps.
+    pub fn arrangement_end(&self) -> u32 {
+        self.tracks
+            .iter()
+            .flat_map(|t| t.arrangement.iter().map(|c| c.start + c.len))
+            .max()
+            .unwrap_or(0)
+    }
+
+    pub fn device_mut(&mut self, id: u64) -> Option<&mut Device> {
+        let chans = self
+            .tracks
+            .iter_mut()
+            .map(|t| &mut t.channel)
+            .chain(self.returns.iter_mut().map(|r| &mut r.channel))
+            .chain(std::iter::once(&mut self.master));
+        for ch in chans {
+            if let Some(d) = ch.devices.iter_mut().find(|d| d.id == id) {
+                return Some(d);
+            }
+        }
+        None
+    }
+
+    /// Repair a project after loading (parameter lists grown in newer versions, etc.).
+    pub fn normalize(&mut self) {
+        let n = self.scenes.len();
+        let mut max_id = self.next_id;
+        for t in &mut self.tracks {
+            t.instrument.normalize();
+            t.clips.resize(n, None);
+            t.macros.resize_with(8, Macro::default);
+            max_id = max_id.max(t.id);
+            for c in &t.arrangement {
+                max_id = max_id.max(c.id);
+            }
+            for m in &mut t.midi_fx {
+                normalize_params(&mut m.params, m.kind.defs());
+                max_id = max_id.max(m.id);
+            }
+        }
+        let chans = self
+            .tracks
+            .iter_mut()
+            .map(|t| &mut t.channel)
+            .chain(self.returns.iter_mut().map(|r| &mut r.channel))
+            .chain(std::iter::once(&mut self.master));
+        for ch in chans {
+            for d in &mut ch.devices {
+                normalize_params(&mut d.params, d.kind.defs());
+                max_id = max_id.max(d.id);
+            }
+        }
+        self.next_id = max_id + 1;
+    }
+}
+
+pub fn color32(c: [u8; 3]) -> egui::Color32 {
+    egui::Color32::from_rgb(c[0], c[1], c[2])
+}

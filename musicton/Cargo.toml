@@ -1,0 +1,33 @@
+[package]
+name = "musicton"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "A techno-focused DAW for Linux"
+
+[dependencies]
+musicton-dsp = { path = "../crates/musicton-dsp" }
+b303-core = { path = "../crates/b303-core" }
+b303-gui = { path = "../crates/b303-gui" }
+eframe = { version = "0.31", default-features = false, features = ["default_fonts", "glow", "wayland", "x11", "persistence"] }
+egui = "0.31"
+cpal = "0.15"
+midir = "0.10"
+hound = "3.5"
+rfd = "0.15"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+crossbeam-channel = "0.5"
+arc-swap = "1.7"
+parking_lot = "0.12"
+dirs = "5"
+png = "0.17"
+base64 = "0.22"
+
+[[bin]]
+name = "musicton"
+path = "src/main.rs"
+
+[[bin]]
+name = "musicton-mcp"
+path = "src/bin/musicton-mcp.rs"

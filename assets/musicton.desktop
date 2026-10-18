@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Musicton
+GenericName=Digital Audio Workstation
+Comment=Techno DAW for Linux
+Exec=musicton
+Icon=musicton
+Terminal=false
+Categories=AudioVideo;Audio;Music;Midi;
+StartupWMClass=musicton

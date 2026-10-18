@@ -1,0 +1,24 @@
+[workspace]
+resolver = "2"
+members = ["musicton", "crates/musicton-dsp", "crates/b303-core", "crates/b303-gui", "b303-plugin", "xtask"]
+default-members = ["musicton"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "GPL-3.0-or-later"
+repository = "https://github.com/AckermannMedia/musicton"
+
+[workspace.dependencies]
+egui = "0.31"
+serde = { version = "1", features = ["derive"] }
+
+[profile.dev]
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 3
+
+[profile.release]
+lto = "thin"
+codegen-units = 4

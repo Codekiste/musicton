@@ -1,0 +1,6 @@
+[package]
+name = "musicton-dsp"
+description = "DSP building blocks shared by Musicton and its plugins"
+version.workspace = true
+edition.workspace = true
+license.workspace = true

@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "musicton": {
+      "type": "stdio",
+      "command": "./target/release/musicton-mcp",
+      "args": []
+    }
+  }
+}
