@@ -795,7 +795,7 @@ pub mod fmop {
     pub const VOLUME: usize = 33;
 }
 
-pub static OPERATOR_PARAMS: LazyLock<Vec<ParamDef>> = LazyLock::new(|| {
+pub static FM4_PARAMS: LazyLock<Vec<ParamDef>> = LazyLock::new(|| {
     let mut v = vec![];
     let levels = [1.0f32, 0.45, 0.3, 0.0];
     let names = ["A", "B", "C", "D"];
@@ -870,7 +870,7 @@ pub static WAVETABLE_PARAMS: LazyLock<Vec<ParamDef>> = LazyLock::new(|| {
     ]
 });
 
-pub mod tension {
+pub mod strm {
     pub const EXCITER: usize = 0;
     pub const DECAY: usize = 1;
     pub const DAMPING: usize = 2;
@@ -882,7 +882,7 @@ pub mod tension {
     pub const VOLUME: usize = 8;
 }
 
-pub static TENSION_PARAMS: LazyLock<Vec<ParamDef>> = LazyLock::new(|| {
+pub static STRING_PARAMS: LazyLock<Vec<ParamDef>> = LazyLock::new(|| {
     vec![
         ParamDef::options("Exciter", &["Pluck", "Hammer", "Bow"], 0),
         ParamDef::new("Decay", 0.0, 1.0, 0.6, Unit::Pct),
@@ -1074,5 +1074,263 @@ pub static RACK_PARAMS: LazyLock<Vec<ParamDef>> = LazyLock::new(|| {
     vec![
         ParamDef::new("Dry/Wet", 0.0, 1.0, 1.0, Unit::Pct),
         ParamDef::new("Output", -24.0, 12.0, 0.0, Unit::Db),
+    ]
+});
+
+// ---------------------------------------------------------------------------------------------
+// Voltage (analog poly), Matrix FM, Grain Cloud
+
+pub mod volt {
+    pub const W1: usize = 0;
+    pub const OCT1: usize = 1;
+    pub const W2: usize = 2;
+    pub const SEMI2: usize = 3;
+    pub const DET2: usize = 4;
+    pub const MIX: usize = 5;
+    pub const PW: usize = 6;
+    pub const SUB: usize = 7;
+    pub const NOISE: usize = 8;
+    pub const CUTOFF: usize = 9;
+    pub const RES: usize = 10;
+    pub const FTYPE: usize = 11;
+    pub const DRIVE: usize = 12;
+    pub const FENV: usize = 13;
+    pub const KEYTRK: usize = 14;
+    pub const FA: usize = 15;
+    pub const FD: usize = 16;
+    pub const FS: usize = 17;
+    pub const FR: usize = 18;
+    pub const AA: usize = 19;
+    pub const AD: usize = 20;
+    pub const AS: usize = 21;
+    pub const AR: usize = 22;
+    pub const LRATE: usize = 23;
+    pub const LSHAPE: usize = 24;
+    pub const L_PITCH: usize = 25;
+    pub const L_CUT: usize = 26;
+    pub const L_PW: usize = 27;
+    pub const UNISON: usize = 28;
+    pub const SPREAD: usize = 29;
+    pub const GLIDE: usize = 30;
+    pub const DRIFT: usize = 31;
+    pub const VOICES: usize = 32;
+    pub const VOLUME: usize = 33;
+}
+
+pub static VOLTAGE_PARAMS: LazyLock<Vec<ParamDef>> = LazyLock::new(|| {
+    const W: &[&str] = &["Saw", "Pulse", "Triangle", "Sine"];
+    vec![
+        ParamDef::options("Osc1 Wave", W, 0),
+        ParamDef::new("Osc1 Oct", -2.0, 2.0, 0.0, Unit::None).step(1.0),
+        ParamDef::options("Osc2 Wave", W, 0),
+        ParamDef::new("Osc2 Semi", -12.0, 12.0, 0.0, Unit::St).step(1.0),
+        ParamDef::new("Osc2 Detune", -50.0, 50.0, 7.0, Unit::Ct),
+        ParamDef::new("Osc Mix", 0.0, 1.0, 0.5, Unit::Pct),
+        ParamDef::new("Pulse Width", 0.05, 0.95, 0.5, Unit::Pct),
+        ParamDef::new("Sub", 0.0, 1.0, 0.0, Unit::Pct),
+        ParamDef::new("Noise", 0.0, 1.0, 0.0, Unit::Pct),
+        ParamDef::new("Cutoff", 30.0, 18000.0, 2200.0, Unit::Hz).log(),
+        ParamDef::new("Reso", 0.0, 1.0, 0.2, Unit::Pct),
+        ParamDef::options("Filter", &["LP 24", "LP 12", "BP", "HP"], 0),
+        ParamDef::new("Drive", 0.0, 1.0, 0.1, Unit::Pct),
+        ParamDef::new("Flt Env", -1.0, 1.0, 0.4, Unit::Pct),
+        ParamDef::new("Key Track", 0.0, 1.0, 0.5, Unit::Pct),
+        ParamDef::new("F Attack", 0.001, 4.0, 0.005, Unit::Sec).log(),
+        ParamDef::new("F Decay", 0.01, 4.0, 0.4, Unit::Sec).log(),
+        ParamDef::new("F Sustain", 0.0, 1.0, 0.2, Unit::Pct),
+        ParamDef::new("F Release", 0.01, 6.0, 0.4, Unit::Sec).log(),
+        ParamDef::new("A Attack", 0.001, 4.0, 0.003, Unit::Sec).log(),
+        ParamDef::new("A Decay", 0.01, 4.0, 0.5, Unit::Sec).log(),
+        ParamDef::new("A Sustain", 0.0, 1.0, 0.7, Unit::Pct),
+        ParamDef::new("A Release", 0.01, 6.0, 0.35, Unit::Sec).log(),
+        ParamDef::new("LFO Rate", 0.05, 30.0, 4.0, Unit::Hz).log(),
+        ParamDef::options("LFO Shape", &["Sine", "Triangle", "Square", "Saw", "S&H"], 0),
+        ParamDef::new("LFO>Pitch", 0.0, 1.0, 0.0, Unit::Pct),
+        ParamDef::new("LFO>Cutoff", 0.0, 1.0, 0.0, Unit::Pct),
+        ParamDef::new("LFO>PW", 0.0, 1.0, 0.0, Unit::Pct),
+        ParamDef::new("Unison", 1.0, 4.0, 1.0, Unit::None).step(1.0),
+        ParamDef::new("Spread", 0.0, 50.0, 10.0, Unit::Ct),
+        ParamDef::new("Glide", 0.0, 1.0, 0.0, Unit::Sec),
+        ParamDef::new("Drift", 0.0, 1.0, 0.3, Unit::Pct),
+        ParamDef::new("Voices", 1.0, 8.0, 8.0, Unit::None).step(1.0),
+        ParamDef::new("Volume", 0.0, 1.0, 0.4, Unit::Pct),
+    ]
+});
+
+/// Matrix FM: 6 operators x 8 params, then a 6x6 modulation matrix (row = source,
+/// column = destination; the diagonal is feedback), then globals.
+pub const MFM_OPS: usize = 6;
+pub const MFM_OP_PARAMS: usize = 8;
+pub const MFM_MATRIX: usize = MFM_OPS * MFM_OP_PARAMS;
+pub const MFM_GLOBAL: usize = MFM_MATRIX + MFM_OPS * MFM_OPS;
+pub mod mfm {
+    pub const RATIO: usize = 0;
+    pub const FINE: usize = 1;
+    pub const LEVEL: usize = 2;
+    pub const OUT: usize = 3;
+    pub const A: usize = 4;
+    pub const D: usize = 5;
+    pub const S: usize = 6;
+    pub const R: usize = 7;
+    pub const VOLUME: usize = super::MFM_GLOBAL;
+    pub const VEL: usize = super::MFM_GLOBAL + 1;
+    pub const VOICES: usize = super::MFM_GLOBAL + 2;
+    pub const GLIDE: usize = super::MFM_GLOBAL + 3;
+}
+
+pub fn mfm_param(op: usize, p: usize) -> usize {
+    op * MFM_OP_PARAMS + p
+}
+pub fn mfm_mod(src: usize, dst: usize) -> usize {
+    MFM_MATRIX + src * MFM_OPS + dst
+}
+
+pub static MATRIX_FM_PARAMS: LazyLock<Vec<ParamDef>> = LazyLock::new(|| {
+    const NAMES: [[&str; 8]; 6] = [
+        ["Op1 Ratio", "Op1 Fine", "Op1 Level", "Op1 Out", "Op1 Attack", "Op1 Decay", "Op1 Sustain", "Op1 Release"],
+        ["Op2 Ratio", "Op2 Fine", "Op2 Level", "Op2 Out", "Op2 Attack", "Op2 Decay", "Op2 Sustain", "Op2 Release"],
+        ["Op3 Ratio", "Op3 Fine", "Op3 Level", "Op3 Out", "Op3 Attack", "Op3 Decay", "Op3 Sustain", "Op3 Release"],
+        ["Op4 Ratio", "Op4 Fine", "Op4 Level", "Op4 Out", "Op4 Attack", "Op4 Decay", "Op4 Sustain", "Op4 Release"],
+        ["Op5 Ratio", "Op5 Fine", "Op5 Level", "Op5 Out", "Op5 Attack", "Op5 Decay", "Op5 Sustain", "Op5 Release"],
+        ["Op6 Ratio", "Op6 Fine", "Op6 Level", "Op6 Out", "Op6 Attack", "Op6 Decay", "Op6 Sustain", "Op6 Release"],
+    ];
+    const MODS: [[&str; 6]; 6] = [
+        ["1>1", "1>2", "1>3", "1>4", "1>5", "1>6"],
+        ["2>1", "2>2", "2>3", "2>4", "2>5", "2>6"],
+        ["3>1", "3>2", "3>3", "3>4", "3>5", "3>6"],
+        ["4>1", "4>2", "4>3", "4>4", "4>5", "4>6"],
+        ["5>1", "5>2", "5>3", "5>4", "5>5", "5>6"],
+        ["6>1", "6>2", "6>3", "6>4", "6>5", "6>6"],
+    ];
+    let mut v = vec![];
+    for (op, n) in NAMES.iter().enumerate() {
+        v.push(ParamDef::new(n[0], 0.25, 16.0, [1.0, 2.0, 3.0, 1.0, 4.0, 0.5][op], Unit::X).step(0.25));
+        v.push(ParamDef::new(n[1], -50.0, 50.0, 0.0, Unit::Ct));
+        v.push(ParamDef::new(n[2], 0.0, 1.0, if op == 0 { 1.0 } else { 0.6 }, Unit::Pct));
+        v.push(ParamDef::new(n[3], 0.0, 1.0, if op == 0 { 1.0 } else { 0.0 }, Unit::Pct));
+        v.push(ParamDef::new(n[4], 0.001, 4.0, 0.002, Unit::Sec).log());
+        v.push(ParamDef::new(n[5], 0.01, 8.0, [1.2, 0.4, 0.8, 0.3, 0.2, 2.0][op], Unit::Sec).log());
+        v.push(ParamDef::new(n[6], 0.0, 1.0, if op == 0 { 0.6 } else { 0.2 }, Unit::Pct));
+        v.push(ParamDef::new(n[7], 0.01, 8.0, 0.4, Unit::Sec).log());
+    }
+    for (src, row) in MODS.iter().enumerate() {
+        for (dst, name) in row.iter().enumerate() {
+            // Default patch: op2 -> op1 classic two-operator tone.
+            let def = if src == 1 && dst == 0 { 0.35 } else { 0.0 };
+            v.push(ParamDef::new(name, 0.0, 1.0, def, Unit::Pct));
+        }
+    }
+    v.push(ParamDef::new("Volume", 0.0, 1.0, 0.4, Unit::Pct));
+    v.push(ParamDef::new("Vel > Mod", 0.0, 1.0, 0.5, Unit::Pct));
+    v.push(ParamDef::new("Voices", 1.0, 8.0, 8.0, Unit::None).step(1.0));
+    v.push(ParamDef::new("Glide", 0.0, 1.0, 0.0, Unit::Sec));
+    v
+});
+
+pub mod grain {
+    pub const SOURCE: usize = 0;
+    pub const POS: usize = 1;
+    pub const SPRAY: usize = 2;
+    pub const SCAN: usize = 3;
+    pub const SIZE: usize = 4;
+    pub const DENSITY: usize = 5;
+    pub const PITCH_SPRAY: usize = 6;
+    pub const OCTAVE_MIX: usize = 7;
+    pub const REVERSE: usize = 8;
+    pub const SPREAD: usize = 9;
+    pub const CUTOFF: usize = 10;
+    pub const ATTACK: usize = 11;
+    pub const RELEASE: usize = 12;
+    pub const VOLUME: usize = 13;
+}
+
+pub static GRAIN_PARAMS: LazyLock<Vec<ParamDef>> = LazyLock::new(|| {
+    vec![
+        ParamDef::options("Source", &["Sample", "Glass Pad", "Choir", "Strings", "Noise Wash"], 1),
+        ParamDef::new("Position", 0.0, 1.0, 0.3, Unit::Pct),
+        ParamDef::new("Spray", 0.0, 1.0, 0.15, Unit::Pct),
+        ParamDef::new("Scan", -1.0, 1.0, 0.05, Unit::X),
+        ParamDef::new("Grain Size", 0.01, 0.5, 0.12, Unit::Sec).log(),
+        ParamDef::new("Density", 2.0, 120.0, 30.0, Unit::Hz).log(),
+        ParamDef::new("Pitch Spray", 0.0, 100.0, 8.0, Unit::Ct),
+        ParamDef::new("Octaves", 0.0, 1.0, 0.15, Unit::Pct),
+        ParamDef::new("Reverse", 0.0, 1.0, 0.2, Unit::Pct),
+        ParamDef::new("Stereo", 0.0, 1.0, 0.7, Unit::Pct),
+        ParamDef::new("Cutoff", 200.0, 18000.0, 9000.0, Unit::Hz).log(),
+        ParamDef::new("Attack", 0.005, 8.0, 0.8, Unit::Sec).log(),
+        ParamDef::new("Release", 0.05, 12.0, 2.5, Unit::Sec).log(),
+        ParamDef::new("Volume", 0.0, 1.0, 0.5, Unit::Pct),
+    ]
+});
+
+pub static BEATPADS_PARAMS: LazyLock<Vec<ParamDef>> = LazyLock::new(|| {
+    vec![
+        ParamDef::new("Volume", 0.0, 1.0, 0.8, Unit::Pct),
+        ParamDef::new("Vel > Level", 0.0, 1.0, 0.7, Unit::Pct),
+        ParamDef::new("Tune", -12.0, 12.0, 0.0, Unit::St),
+    ]
+});
+
+pub mod multi {
+    pub const ATTACK: usize = 0;
+    pub const DECAY: usize = 1;
+    pub const SUSTAIN: usize = 2;
+    pub const RELEASE: usize = 3;
+    pub const CUTOFF: usize = 4;
+    pub const RES: usize = 5;
+    pub const FENV: usize = 6;
+    pub const VEL_LEVEL: usize = 7;
+    pub const VEL_CUT: usize = 8;
+    pub const ROUND_ROBIN: usize = 9;
+    pub const TRANSPOSE: usize = 10;
+    pub const VOICES: usize = 11;
+    pub const VOLUME: usize = 12;
+}
+
+pub static MULTI_PARAMS: LazyLock<Vec<ParamDef>> = LazyLock::new(|| {
+    vec![
+        ParamDef::new("Attack", 0.001, 4.0, 0.002, Unit::Sec).log(),
+        ParamDef::new("Decay", 0.01, 8.0, 1.0, Unit::Sec).log(),
+        ParamDef::new("Sustain", 0.0, 1.0, 1.0, Unit::Pct),
+        ParamDef::new("Release", 0.01, 8.0, 0.4, Unit::Sec).log(),
+        ParamDef::new("Cutoff", 60.0, 20000.0, 20000.0, Unit::Hz).log(),
+        ParamDef::new("Reso", 0.0, 1.0, 0.1, Unit::Pct),
+        ParamDef::new("Flt Env", 0.0, 1.0, 0.0, Unit::Pct),
+        ParamDef::new("Vel > Level", 0.0, 1.0, 0.7, Unit::Pct),
+        ParamDef::new("Vel > Cutoff", 0.0, 1.0, 0.0, Unit::Pct),
+        ParamDef::options("Overlaps", &["Layer", "Round Robin", "Random"], 0),
+        ParamDef::new("Transpose", -24.0, 24.0, 0.0, Unit::St).step(1.0),
+        ParamDef::new("Voices", 1.0, 32.0, 24.0, Unit::None).step(1.0),
+        ParamDef::new("Volume", 0.0, 1.0, 0.7, Unit::Pct),
+    ]
+});
+
+pub mod slicer {
+    pub const MODE: usize = 0;
+    pub const SENS: usize = 1;
+    pub const BEATS: usize = 2;
+    pub const SYNC: usize = 3;
+    pub const TRANSPOSE: usize = 4;
+    pub const ATTACK: usize = 5;
+    pub const RELEASE: usize = 6;
+    pub const PLAY: usize = 7;
+    pub const REVERSE: usize = 8;
+    pub const VOLUME: usize = 9;
+}
+
+pub const SLICER_MODES: &[&str] = &["Transients", "8 Slices", "16 Slices", "32 Slices"];
+
+pub static SLICER_PARAMS: LazyLock<Vec<ParamDef>> = LazyLock::new(|| {
+    vec![
+        ParamDef::options("Slice By", SLICER_MODES, 0),
+        ParamDef::new("Sensitivity", 0.0, 1.0, 0.5, Unit::Pct),
+        ParamDef::new("Beats", 1.0, 32.0, 8.0, Unit::None).step(1.0),
+        ParamDef::options("Tempo Sync", &["Off", "On"], 1),
+        ParamDef::new("Transpose", -24.0, 24.0, 0.0, Unit::St),
+        ParamDef::new("Attack", 0.0005, 0.2, 0.001, Unit::Sec).log(),
+        ParamDef::new("Release", 0.005, 2.0, 0.03, Unit::Sec).log(),
+        ParamDef::options("Playback", &["Mono (cut)", "Poly", "Gate"], 0),
+        ParamDef::options("Reverse", &["Off", "On"], 0),
+        ParamDef::new("Volume", 0.0, 1.0, 0.8, Unit::Pct),
     ]
 });

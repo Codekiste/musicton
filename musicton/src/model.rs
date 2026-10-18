@@ -23,6 +23,12 @@ pub enum InstrumentKind {
     Group,
     B303,
     Nexa,
+    Voltage,
+    MatrixFm,
+    GrainCloud,
+    BeatPads,
+    MultiSampler,
+    Slicer,
 }
 
 impl InstrumentKind {
@@ -39,13 +45,35 @@ impl InstrumentKind {
             Self::Group => "Group Track",
             Self::B303 => "B-303 Bassline",
             Self::Nexa => "Nexa",
+            Self::Voltage => "Voltage",
+            Self::MatrixFm => "Matrix FM",
+            Self::GrainCloud => "Grain Cloud",
+            Self::BeatPads => "Beat Pads",
+            Self::MultiSampler => "Multi Sampler",
+            Self::Slicer => "Slicer",
         }
     }
-    pub const ALL: [InstrumentKind; 9] = [Self::Drums, Self::B303, Self::Bass, Self::Nexa, Self::Synth, Self::Sampler, Self::Fm4, Self::Morph, Self::StringModel];
+    pub const ALL: [InstrumentKind; 15] = [
+        Self::Drums,
+        Self::BeatPads,
+        Self::B303,
+        Self::Bass,
+        Self::Nexa,
+        Self::Voltage,
+        Self::Synth,
+        Self::MatrixFm,
+        Self::Fm4,
+        Self::Morph,
+        Self::GrainCloud,
+        Self::Sampler,
+        Self::MultiSampler,
+        Self::Slicer,
+        Self::StringModel,
+    ];
     pub fn info(self) -> &'static str {
         match self {
             Self::Drums => "Synthesized drum machine with ten lanes; every lane can also play a WAV sample.",
-            Self::Bass => "Monophonic 303-style bass with accent and slide.",
+            Self::Bass => "Monophonic acid bass with accent and slide.",
             Self::Synth => "Subtractive polyphonic synthesizer with unison.",
             Self::Sampler => "Sampler: play a WAV melodically (Classic), as one-shot, or chop it into slices across the keyboard (Slice).",
             Self::Fm4 => "4-operator FM synthesizer with 8 algorithms - metallic bells, basses and plucks.",
@@ -54,6 +82,12 @@ impl InstrumentKind {
             Self::Audio => "Plays audio clips (WAV loops and samples), warped to the song tempo.",
             Self::Group => "Sums its member tracks into one channel with its own effects and fader.",
             Self::B303 => "acid bassline: saw/square VCO, resonant diode-ladder style filter, accent with sweep circuit, slide - with a classic 16-step pattern editor.",
+            Self::Voltage => "Analog-style polysynth: two oscillators with pulse-width modulation, sub and noise, 24/12 dB filter with drive, two envelopes, LFO, unison, glide and analog drift.",
+            Self::MatrixFm => "Six-operator FM synth with a free modulation matrix: every operator can modulate every other (and itself), each with its own envelope and output level.",
+            Self::MultiSampler => "Multisample instrument: key and velocity zones, each with its own WAV, round robin, filter and envelopes. Load a folder and the notes in the file names map the zones automatically.",
+            Self::Slicer => "Chops a loop into slices at its transients or on a beat grid and plays them from C1 upwards. One click turns the slices into a clip that replays the loop.",
+            Self::BeatPads => "Sixteen pads, each with its own sample or synthesized drum voice, tuning, decay, choke group and its own effect chain.",
+            Self::GrainCloud => "Granular pad synth: clouds of tiny grains from a WAV or built-in sources, with position scan, spray, pitch scatter, octaves and reverse grains.",
             Self::Nexa => "preset ROMpler: browse ready-made trance/EDM sounds by category, shape them with macros, built-in arpeggiator, trancegate and effects.",
         }
     }
@@ -63,17 +97,27 @@ impl InstrumentKind {
             Self::Bass => &params::BASS_PARAMS,
             Self::Synth => &params::SYNTH_PARAMS,
             Self::Sampler => &params::SAMPLER_PARAMS,
-            Self::Fm4 => &params::OPERATOR_PARAMS,
+            Self::Fm4 => &params::FM4_PARAMS,
             Self::Morph => &params::WAVETABLE_PARAMS,
-            Self::StringModel => &params::TENSION_PARAMS,
+            Self::StringModel => &params::STRING_PARAMS,
             Self::Audio | Self::Group => &[],
             Self::B303 => &params::B303_PARAMS,
             Self::Nexa => &params::NEXA_PARAMS,
+            Self::Voltage => &params::VOLTAGE_PARAMS,
+            Self::MatrixFm => &params::MATRIX_FM_PARAMS,
+            Self::GrainCloud => &params::GRAIN_PARAMS,
+            Self::BeatPads => &params::BEATPADS_PARAMS,
+            Self::MultiSampler => &params::MULTI_PARAMS,
+            Self::Slicer => &params::SLICER_PARAMS,
         }
     }
     /// Instruments whose clips are edited in the piano roll with a melodic range.
     pub fn is_melodic(self) -> bool {
-        !matches!(self, Self::Drums | Self::Audio | Self::Group)
+        !matches!(self, Self::Drums | Self::BeatPads | Self::Audio | Self::Group)
+    }
+    /// Instruments played lane by lane (pitch = lane index) in the step sequencer.
+    pub fn is_drum_like(self) -> bool {
+        matches!(self, Self::Drums | Self::BeatPads)
     }
 }
 
@@ -380,30 +424,177 @@ pub struct Instrument {
     /// B-303 only: internal sequencer patterns.
     #[serde(default)]
     pub bank: Option<SeqBank>,
+    /// Beat Pads only.
+    #[serde(default)]
+    pub pads: Vec<Pad>,
+    /// Multi Sampler only.
+    #[serde(default)]
+    pub zones: Vec<Zone>,
+}
+
+/// A key/velocity zone of the Multi Sampler.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Zone {
+    pub path: String,
+    pub root: u8,
+    pub lo: u8,
+    pub hi: u8,
+    pub vlo: u8,
+    pub vhi: u8,
+    /// Cents.
+    pub tune: f32,
+    /// dB.
+    pub gain: f32,
+}
+
+impl Zone {
+    pub fn new(path: &str, root: u8) -> Self {
+        Self { path: path.into(), root, lo: root, hi: root, vlo: 0, vhi: 127, tune: 0.0, gain: 0.0 }
+    }
+}
+
+/// Finds a note name (C3, F#2, Db4) or a MIDI number in a file name. C3 = 60.
+pub fn note_in_name(name: &str) -> Option<u8> {
+    let up: Vec<char> = name.chars().collect();
+    let names = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+    let flats = [("DB", 1), ("EB", 3), ("GB", 6), ("AB", 8), ("BB", 10)];
+    for i in 0..up.len() {
+        // A note letter not preceded by another letter.
+        if i > 0 && up[i - 1].is_ascii_alphabetic() {
+            continue;
+        }
+        let c = up[i].to_ascii_uppercase();
+        if !"CDEFGAB".contains(c) {
+            continue;
+        }
+        let mut j = i + 1;
+        let mut semi = names.iter().position(|n| *n == c.to_string()).unwrap() as i32;
+        if j < up.len() && (up[j] == '#' || up[j] == 's') {
+            semi += 1;
+            j += 1;
+        } else if j < up.len() && up[j] == 'b' {
+            if let Some((_, s)) = flats.iter().find(|(f, _)| f.starts_with(c)) {
+                semi = *s;
+                j += 1;
+            }
+        }
+        let neg = j < up.len() && up[j] == '-';
+        if neg {
+            j += 1;
+        }
+        if j < up.len() && up[j].is_ascii_digit() && (j + 1 >= up.len() || !up[j + 1].is_ascii_digit()) {
+            let oct = up[j].to_digit(10).unwrap() as i32 * if neg { -1 } else { 1 };
+            let midi = (oct + 2) * 12 + semi;
+            if (0..128).contains(&midi) {
+                return Some(midi as u8);
+            }
+        }
+    }
+    // Plain MIDI number surrounded by separators, e.g. "piano_060.wav".
+    name.split(|c: char| !c.is_ascii_digit()).filter(|s| s.len() >= 2 && s.len() <= 3).filter_map(|s| s.parse::<u8>().ok()).find(|n| (21..=108).contains(n))
+}
+
+/// Builds zones from sample files: notes in names become roots, key ranges are split halfway
+/// between neighbouring roots. Files without a note are laid out chromatically from C2.
+pub fn zones_from_files(paths: &[String]) -> Vec<Zone> {
+    let mut found: Vec<(u8, String)> = vec![];
+    let mut next = 48u8;
+    for p in paths {
+        let stem = std::path::Path::new(p).file_stem().map(|f| f.to_string_lossy().to_string()).unwrap_or_default();
+        let root = note_in_name(&stem).unwrap_or_else(|| {
+            next = next.saturating_add(1);
+            next - 1
+        });
+        found.push((root, p.clone()));
+    }
+    found.sort_by_key(|f| f.0);
+    found.dedup_by_key(|f| f.0);
+    let n = found.len();
+    (0..n)
+        .map(|i| {
+            let root = found[i].0;
+            let lo = if i == 0 { 0 } else { ((found[i - 1].0 as u16 + root as u16) / 2 + 1) as u8 };
+            let hi = if i + 1 == n { 127 } else { ((root as u16 + found[i + 1].0 as u16) / 2) as u8 };
+            Zone { lo, hi, ..Zone::new(&found[i].1, root) }
+        })
+        .collect()
+}
+
+/// One pad of the Beat Pads instrument.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Pad {
+    pub name: String,
+    /// WAV sample; without one the pad plays the synthesized drum voice `voice`.
+    pub sample: Option<String>,
+    pub voice: u8,
+    /// Semitones.
+    pub tune: f32,
+    /// dB.
+    pub gain: f32,
+    pub pan: f32,
+    /// Amplitude decay in seconds (long values play the whole sample).
+    pub decay: f32,
+    /// 0 = none, 1..4 = choke group: a pad cuts off other pads of its group.
+    pub choke: u8,
+    pub reverse: bool,
+    #[serde(default)]
+    pub devices: Vec<Device>,
+}
+
+impl Pad {
+    pub fn new(i: usize) -> Self {
+        let voice = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 2, 4, 5, 9, 1][i % 16] as u8;
+        let name = params::DRUM_LANES[voice as usize].to_string();
+        // Closed and open hats choke each other.
+        let choke = if voice == 4 || voice == 5 { 1 } else { 0 };
+        Self { name, sample: None, voice, tune: 0.0, gain: 0.0, pan: 0.0, decay: 2.0, choke, reverse: false, devices: vec![] }
+    }
+    pub fn default_set() -> Vec<Pad> {
+        (0..16).map(Pad::new).collect()
+    }
 }
 
 impl Instrument {
+    /// Lane names for drum-like instruments (sample file names where loaded).
+    pub fn lane_names(&self) -> Vec<String> {
+        let stem = |s: &str| std::path::Path::new(s).file_stem().map(|f| f.to_string_lossy().to_string()).unwrap_or_default();
+        match self.kind {
+            InstrumentKind::BeatPads => self.pads.iter().map(|p| if p.name.is_empty() { p.sample.as_deref().map(stem).unwrap_or_default() } else { p.name.clone() }).collect(),
+            InstrumentKind::Drums => params::DRUM_LANES
+                .iter()
+                .enumerate()
+                .map(|(i, n)| self.samples.get(i).cloned().flatten().map(|s| stem(&s)).unwrap_or_else(|| n.to_string()))
+                .collect(),
+            _ => vec![],
+        }
+    }
     pub fn new(kind: InstrumentKind) -> Self {
         let samples = match kind {
             InstrumentKind::Drums => vec![None; params::DRUM_LANES.len()],
-            InstrumentKind::Sampler => vec![None],
+            InstrumentKind::Sampler | InstrumentKind::GrainCloud | InstrumentKind::Slicer => vec![None],
             _ => vec![],
         };
         let bank = (kind == InstrumentKind::B303).then(SeqBank::factory);
-        Self { kind, params: params::defaults(kind.defs()), samples, bank }
+        let pads = if kind == InstrumentKind::BeatPads { Pad::default_set() } else { vec![] };
+        Self { kind, params: params::defaults(kind.defs()), samples, bank, pads, zones: vec![] }
     }
     pub fn normalize(&mut self) {
         normalize_params(&mut self.params, self.kind.defs());
         match self.kind {
             InstrumentKind::Drums => self.samples.resize(params::DRUM_LANES.len(), None),
-            InstrumentKind::Sampler => self.samples.resize(1, None),
+            InstrumentKind::Sampler | InstrumentKind::GrainCloud | InstrumentKind::Slicer => self.samples.resize(1, None),
             InstrumentKind::B303 if self.bank.is_none() => self.bank = Some(SeqBank::factory()),
+            InstrumentKind::BeatPads => {
+                let n = self.pads.len();
+                self.pads.extend((n..16).map(Pad::new));
+                self.pads.truncate(16);
+            }
             _ => {}
         }
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Device {
     pub id: u64,
     pub kind: DeviceKind,
@@ -417,7 +608,7 @@ pub struct Device {
     pub chains: Vec<RackChain>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct RackChain {
     pub name: String,
     pub devices: Vec<Device>,
@@ -1154,6 +1345,11 @@ impl Project {
     }
 
     pub fn device_mut(&mut self, id: u64) -> Option<&mut Device> {
+        // Pad effect chains of Beat Pads instruments.
+        let in_pad = self.tracks.iter().enumerate().find_map(|(ti, t)| t.instrument.pads.iter().position(|p| contains_device(&p.devices, id)).map(|pi| (ti, pi)));
+        if let Some((ti, pi)) = in_pad {
+            return find_device(&mut self.tracks[ti].instrument.pads[pi].devices, id);
+        }
         let chans = self
             .tracks
             .iter_mut()
@@ -1194,9 +1390,12 @@ impl Project {
         for ch in chans {
             normalize_devices(&mut ch.devices, &mut max_id);
         }
-        for t in &self.tracks {
+        for t in &mut self.tracks {
             for m in &t.modulators {
                 max_id = max_id.max(m.id);
+            }
+            for pad in &mut t.instrument.pads {
+                normalize_devices(&mut pad.devices, &mut max_id);
             }
         }
         let ids = self.markers.iter().map(|m| m.id).chain(self.sections.iter().map(|s| s.id)).chain(self.playlist.iter().map(|b| b.id));
@@ -1232,4 +1431,8 @@ fn normalize_devices(devs: &mut [Device], max_id: &mut u64) {
             normalize_devices(&mut c.devices, max_id);
         }
     }
+}
+
+fn contains_device(devs: &[Device], id: u64) -> bool {
+    devs.iter().any(|d| d.id == id || d.chains.iter().any(|c| contains_device(&c.devices, id)))
 }

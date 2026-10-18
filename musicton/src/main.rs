@@ -10,6 +10,8 @@ mod ui;
 mod tests_workflow;
 #[cfg(test)]
 mod tests_effects;
+#[cfg(test)]
+mod tests_instruments;
 
 fn main() -> eframe::Result {
     // `--x11` runs through XWayland: Wayland compositors pause hidden windows, which would also
@@ -140,14 +142,22 @@ mod tests {
             let id = p.add_track("T", preset.kind, CLIP_COLORS[0]);
             let t = p.track_mut(id).unwrap();
             t.instrument = preset.build();
-            if preset.kind == InstrumentKind::Sampler {
+            if matches!(preset.kind, InstrumentKind::Sampler | InstrumentKind::Slicer) {
                 t.instrument.samples[0] = Some(wav_s.clone());
+            }
+            if preset.kind == InstrumentKind::Slicer {
+                // Equal slices so the test tone has something to play.
+                t.instrument.params[crate::params::slicer::MODE] = 1.0;
+            }
+            if preset.kind == InstrumentKind::MultiSampler {
+                t.instrument.zones = vec![Zone { lo: 0, hi: 127, ..Zone::new(&wav_s, 57) }];
             }
             let mut clip = Clip::new("c", CLIP_COLORS[0], 1);
             for s in 0..4u32 {
                 let pitch = match preset.kind {
                     InstrumentKind::Drums => s as u8,
-                    InstrumentKind::Sampler => 36 + s as u8,
+                    InstrumentKind::Sampler | InstrumentKind::Slicer => 36 + s as u8,
+                    InstrumentKind::BeatPads => s as u8,
                     _ => 48 + s as u8 * 3,
                 };
                 clip.notes.push(Note { step: s * 4, len: 3, pitch, vel: 110, slide: false });

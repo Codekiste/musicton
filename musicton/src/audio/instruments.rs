@@ -44,6 +44,12 @@ pub fn create(kind: InstrumentKind, sr: f32) -> Box<dyn InstrumentDsp> {
         InstrumentKind::Group => Box::new(Silent),
         InstrumentKind::B303 => Box::new(super::b303::B303::new(sr)),
         InstrumentKind::Nexa => Box::new(super::nexa::Nexa::new(sr)),
+        InstrumentKind::Voltage => Box::new(super::instruments3::Voltage::new(sr)),
+        InstrumentKind::MatrixFm => Box::new(super::instruments3::MatrixFm::new(sr)),
+        InstrumentKind::GrainCloud => Box::new(super::instruments3::GrainCloud::new(sr)),
+        InstrumentKind::BeatPads => Box::new(super::beatpads::BeatPads::new(sr)),
+        InstrumentKind::MultiSampler => Box::new(super::samplers::MultiSampler::new(sr)),
+        InstrumentKind::Slicer => Box::new(super::samplers::Slicer::new(sr)),
     }
 }
 

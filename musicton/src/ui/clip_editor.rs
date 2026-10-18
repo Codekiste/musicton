@@ -5,7 +5,6 @@ use super::widgets;
 use super::{App, ClipRef, Payload, RenameTarget};
 use crate::audio::engine::Cmd;
 use crate::model::*;
-use crate::params::DRUM_LANES;
 use egui::{pos2, vec2, Align2, Color32, FontId, Rect, Sense, Stroke};
 
 #[derive(Clone, Copy, Debug)]
@@ -75,7 +74,7 @@ impl App {
                     self.audio_editor(ui, r);
                 } else if kind == InstrumentKind::B303 && !self.b303_piano_roll {
                     self.b303_pattern_editor(ui, r);
-                } else if kind == InstrumentKind::Drums {
+                } else if kind.is_drum_like() {
                     self.step_sequencer(ui, r, track_id);
                 } else if kind == InstrumentKind::Audio {
                     ui.label(egui::RichText::new("This clip has no audio. Drop a WAV onto the slot.").color(TEXT_DIM));
@@ -196,7 +195,7 @@ impl App {
                 }
             });
         }
-        if kind != InstrumentKind::Drums && c.audio.is_none() {
+        if !kind.is_drum_like() && c.audio.is_none() {
             ui.horizontal(|ui| {
                 ui.label("Transpose");
                 for (label, d) in [("-12", -12i32), ("-1", -1), ("+1", 1), ("+12", 12)] {
@@ -341,14 +340,14 @@ impl App {
 
     fn step_sequencer(&mut self, ui: &mut egui::Ui, r: ClipRef, track: u64) {
         let Some(clip) = self.clip(r).cloned() else { return };
-        let lanes = DRUM_LANES.len();
+        let names = self.project.track(track).map(|t| t.instrument.lane_names()).unwrap_or_default();
+        let lanes = names.len().max(1);
         let label_w = 92.0;
         let avail = ui.available_size();
         let row_h = ((avail.y - 8.0) / lanes as f32).clamp(14.0, 24.0);
         let steps = clip.len.max(1) as usize;
         let cell_w = ((avail.x - label_w - 6.0) / steps as f32).max(14.0);
         let grid_w = cell_w * steps as f32;
-        let samples = self.project.track(track).map(|t| t.instrument.samples.clone()).unwrap_or_default();
         let playhead = self.playhead_step(r);
         ui.horizontal_top(|ui| {
             // Lane labels.
@@ -358,10 +357,7 @@ impl App {
                 let resp = ui.interact(rr, ui.id().with(("lane_lbl", lane)), Sense::click());
                 let sel = self.drum_lane == lane;
                 ui.painter().rect_filled(rr, 0.0, if sel { PANEL_LIGHT } else if resp.hovered() { Color32::from_rgb(0x3e, 0x3e, 0x3e) } else { PANEL_DARK });
-                let name = match samples.get(lane).cloned().flatten() {
-                    Some(s) => std::path::Path::new(&s).file_stem().map(|f| f.to_string_lossy().to_string()).unwrap_or_default(),
-                    None => DRUM_LANES[lane].to_string(),
-                };
+                let name = names.get(lane).cloned().unwrap_or_default();
                 ui.painter().with_clip_rect(rr).text(rr.left_center() + vec2(4.0, 0.0), Align2::LEFT_CENTER, name, FontId::proportional(11.0), if sel { ACCENT } else { TEXT });
                 if resp.clicked() {
                     self.drum_lane = lane;
@@ -371,7 +367,7 @@ impl App {
                     self.drum_lane = lane;
                     self.assign_sample(Some(track), lane, &path);
                 }
-                self.hint(&resp, DRUM_LANES[lane], "Drum lane. Click to audition and select it (its sound parameters show in the Device Chain). Drop a WAV sample here to replace the sound.");
+                self.hint(&resp, &names.get(lane).cloned().unwrap_or_default(), "Drum lane. Click to audition and select it (its sound parameters show in the Device Chain). Drop a WAV sample here to replace the sound.");
             }
             egui::ScrollArea::horizontal().drag_to_scroll(false).id_salt("steps_h").show(ui, |ui| {
                 let (gr, resp) = ui.allocate_exact_size(vec2(grid_w, row_h * lanes as f32), Sense::click_and_drag());

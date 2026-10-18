@@ -8,11 +8,14 @@ mod devices;
 mod export;
 mod instruments_ui;
 mod mapping;
+mod pads_ui;
 mod plugin_ui;
 mod rack_ui;
+mod samplers_ui;
 mod remote;
 mod remote_workflow;
 mod session;
+mod synth_ui;
 pub mod theme;
 mod transport;
 mod widgets;
@@ -444,18 +447,33 @@ impl App {
                     self.create_clip(track, scene, c);
                 }
             }
-            InstrumentKind::Sampler => {
+            InstrumentKind::Sampler | InstrumentKind::Slicer | InstrumentKind::GrainCloud => {
                 let p = path.to_string_lossy().to_string();
                 if samples::load(&p).is_ok() {
                     if let Some(t) = self.project.track_mut(track) {
                         t.instrument.samples[0] = Some(p);
+                        if kind == InstrumentKind::GrainCloud {
+                            t.instrument.params[crate::params::grain::SOURCE] = 0.0;
+                        }
                     }
                     self.touch();
-                    self.toast("Sample loaded into Sampler");
+                    self.toast(format!("Sample loaded into {}", kind.name()));
                 }
             }
-            InstrumentKind::Drums => self.assign_sample(Some(track), self.drum_lane, path),
-            _ => self.toast("Drop samples on an audio track, a Sampler or a drum lane"),
+            InstrumentKind::MultiSampler => {
+                let p = path.to_string_lossy().to_string();
+                if samples::load(&p).is_ok() {
+                    if let Some(t) = self.project.track_mut(track) {
+                        let mut files: Vec<String> = t.instrument.zones.iter().map(|z| z.path.clone()).collect();
+                        files.push(p);
+                        t.instrument.zones = zones_from_files(&files);
+                    }
+                    self.touch();
+                    self.toast("Sample added as a zone");
+                }
+            }
+            InstrumentKind::Drums | InstrumentKind::BeatPads => self.assign_sample(Some(track), self.drum_lane, path),
+            _ => self.toast("Drop samples on an audio track, a sampler instrument or a drum lane"),
         }
     }
 
@@ -469,7 +487,7 @@ impl App {
             return;
         }
         let name = format!("{} {}", t.name, scene + 1);
-        let clip = Clip::new(&name, t.color, if t.instrument.kind == InstrumentKind::Drums { 1 } else { 2 });
+        let clip = Clip::new(&name, t.color, if t.instrument.kind.is_drum_like() { 1 } else { 2 });
         self.create_clip(track, scene, clip);
     }
 
@@ -990,7 +1008,7 @@ impl App {
 
     fn record_note(&mut self, h: &HeldNote, len: f64) {
         let Some(ts) = self.track_status(h.track).cloned() else { return };
-        let is_drum = self.project.track(h.track).is_some_and(|t| t.instrument.kind == InstrumentKind::Drums);
+        let is_drum = self.project.track(h.track).is_some_and(|t| t.instrument.kind.is_drum_like());
         let (r, local_raw) = if let Some(scene) = ts.playing {
             (ClipRef::Session { track: h.track, scene }, h.start_tick.round() - ts.start_tick as f64)
         } else if let (true, Some(id)) = (ts.follow_arr, ts.arr_clip) {
@@ -1023,7 +1041,7 @@ impl App {
         let end = phrase.iter().map(|n| n.start + n.len).fold(0.0, f64::max);
         let bars = (((end - t0) / 16.0).ceil().max(1.0) as u32).next_power_of_two().min(8);
         let t = self.project.track(track).unwrap();
-        let is_drum = t.instrument.kind == InstrumentKind::Drums;
+        let is_drum = t.instrument.kind.is_drum_like();
         let mut clip = Clip::new(&format!("{} Capture", t.name), t.color, bars);
         for n in phrase {
             let step = ((n.start - t0).round().max(0.0) as u32) % clip.len;
@@ -1120,9 +1138,10 @@ impl App {
                 continue;
             }
             if let Some(semi) = piano_key(key) {
-                let is_drum = self.selected_track().and_then(|id| self.project.track(id)).is_some_and(|t| t.instrument.kind == InstrumentKind::Drums);
+                let is_drum = self.selected_track().and_then(|id| self.project.track(id)).is_some_and(|t| t.instrument.kind.is_drum_like());
                 let pitch = if is_drum {
-                    if semi >= DRUM_LANES.len() as i32 {
+                    let lanes = self.selected_track().and_then(|id| self.project.track(id)).map(|t| t.instrument.lane_names().len()).unwrap_or(DRUM_LANES.len());
+                    if semi >= lanes as i32 {
                         continue;
                     }
                     semi as u8
@@ -1176,7 +1195,7 @@ impl App {
         }
         let target = self.selected_track().unwrap_or(0);
         self.midi.target_track.store(target, std::sync::atomic::Ordering::Relaxed);
-        let is_drum = self.project.track(target).is_some_and(|t| t.instrument.kind == InstrumentKind::Drums);
+        let is_drum = self.project.track(target).is_some_and(|t| t.instrument.kind.is_drum_like());
         self.midi.target_is_drum.store(is_drum, std::sync::atomic::Ordering::Relaxed);
     }
 

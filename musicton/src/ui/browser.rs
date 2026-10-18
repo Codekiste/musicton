@@ -266,6 +266,16 @@ impl App {
             return;
         }
         let Some(t) = self.project.track_mut(track) else { return };
+        if t.instrument.kind == InstrumentKind::BeatPads {
+            if let Some(pad) = t.instrument.pads.get_mut(lane) {
+                let stem = path.file_stem().map(|f| f.to_string_lossy().to_string()).unwrap_or_default();
+                pad.sample = Some(p);
+                pad.name = stem.chars().take(14).collect();
+                self.touch();
+                self.toast(format!("Loaded sample into pad {}", lane + 1));
+            }
+            return;
+        }
         if t.instrument.kind != InstrumentKind::Drums {
             self.toast("Samples can be loaded into drum machine lanes");
             return;

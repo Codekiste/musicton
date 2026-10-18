@@ -3,7 +3,7 @@
 use super::dsp::*;
 use super::instruments::InstrumentDsp;
 use super::samples::{self, Sample};
-use crate::params::{self, fmop, smp, tension, wavetable, OP_PARAMS};
+use crate::params::{self, fmop, smp, strm, wavetable, OP_PARAMS};
 use std::f32::consts::TAU;
 use std::sync::{Arc, LazyLock};
 
@@ -270,7 +270,7 @@ pub struct Fm4 {
 
 impl Fm4 {
     pub fn new(sr: f32) -> Self {
-        Self { sr, p: params::defaults(&params::OPERATOR_PARAMS), voices: (0..12).map(|_| OVoice::default()).collect(), age: 0 }
+        Self { sr, p: params::defaults(&params::FM4_PARAMS), voices: (0..12).map(|_| OVoice::default()).collect(), age: 0 }
     }
     fn apply_env(&mut self) {
         let p = &self.p;
@@ -701,7 +701,7 @@ impl StringModel {
         let mut body = [Biquad::default(); 2];
         body[0].peaking(220.0, 1.5, 8.0, sr);
         body[1].peaking(900.0, 2.0, 5.0, sr);
-        Self { sr, p: params::defaults(&params::TENSION_PARAMS), voices: (0..8).map(mk).collect(), body, age: 0 }
+        Self { sr, p: params::defaults(&params::STRING_PARAMS), voices: (0..8).map(mk).collect(), body, age: 0 }
     }
 }
 
@@ -723,15 +723,15 @@ impl InstrumentDsp for StringModel {
         v.gate = gate;
         v.held = gate.is_none();
         v.age = self.age;
-        let exciter = p[tension::EXCITER].round() as i32;
+        let exciter = p[strm::EXCITER].round() as i32;
         v.bowing = exciter == 2;
         v.excite_left = match exciter {
             0 => (sr / v.freq) as u32,
             1 => (sr * 0.002) as u32,
             _ => u32::MAX,
         };
-        v.excite_lp.set_lowpass(500.0 + p[tension::BRIGHT] * 12000.0 * (0.5 + v.vel * 0.5), sr);
-        v.lp.set_lowpass(1000.0 + (1.0 - p[tension::DAMPING]) * 14000.0, sr);
+        v.excite_lp.set_lowpass(500.0 + p[strm::BRIGHT] * 12000.0 * (0.5 + v.vel * 0.5), sr);
+        v.lp.set_lowpass(1000.0 + (1.0 - p[strm::DAMPING]) * 14000.0, sr);
         v.level = 1.0;
     }
     fn note_off(&mut self, pitch: u8) {
@@ -750,12 +750,12 @@ impl InstrumentDsp for StringModel {
     fn render(&mut self, l: &mut [f32], r: &mut [f32]) {
         let p = &self.p;
         let sr = self.sr;
-        let t60 = 0.3 + p[tension::DECAY].powi(2) * 15.0;
-        let inharm = p[tension::INHARM] * 0.7;
-        let pickup = p[tension::PICKUP] * 0.5;
-        let vib_amt = p[tension::VIBRATO] * 0.006;
-        let vol = p[tension::VOLUME] * 0.6;
-        let body_mix = p[tension::BODY];
+        let t60 = 0.3 + p[strm::DECAY].powi(2) * 15.0;
+        let inharm = p[strm::INHARM] * 0.7;
+        let pickup = p[strm::PICKUP] * 0.5;
+        let vib_amt = p[strm::VIBRATO] * 0.006;
+        let vol = p[strm::VOLUME] * 0.6;
+        let body_mix = p[strm::BODY];
         let release_t60 = 0.08;
         let mut mono = [0.0f32; super::dsp::MAX_BLOCK];
         for v in self.voices.iter_mut().filter(|v| v.active) {

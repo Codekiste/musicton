@@ -98,6 +98,8 @@ impl App {
         let mut inst = t.instrument.clone();
         let before = inst.params.clone();
         let before_samples = inst.samples.clone();
+        let before_pads = inst.pads.clone();
+        let before_zones = inst.zones.clone();
         Self::panel_frame(ui, false, |ui| {
             ui.set_min_height(200.0);
             ui.horizontal(|ui| {
@@ -185,6 +187,8 @@ impl App {
                         });
                     });
                 }
+                InstrumentKind::MatrixFm => self.matrix_fm_ui(ui, track, &mut inst),
+                InstrumentKind::BeatPads => self.beat_pads_ui(ui, track, &mut inst),
                 InstrumentKind::Fm4 => {
                     ui.horizontal_top(|ui| {
                         ui.vertical(|ui| {
@@ -222,7 +226,20 @@ impl App {
                 }
                 _ => {
                     if kind == InstrumentKind::Sampler {
-                        self.simpler_sample_view(ui, track, &mut inst);
+                        self.sample_view(ui, track, &mut inst);
+                    }
+                    if kind == InstrumentKind::MultiSampler {
+                        self.multi_sampler_ui(ui, track, &mut inst);
+                    }
+                    if kind == InstrumentKind::Slicer {
+                        self.slicer_ui(ui, track, &mut inst);
+                    }
+                    if kind == InstrumentKind::GrainCloud {
+                        if inst.params[params::grain::SOURCE] < 0.5 {
+                            self.sample_view(ui, track, &mut inst);
+                        } else {
+                            ui.label(RichText::new("Built-in source - set Source to \"Sample\" to granulate your own WAV.").size(10.5).color(TEXT_DIM));
+                        }
                     }
                     let rows = defs.len().div_ceil(12).max(2);
                     let cols = defs.len().div_ceil(rows);
@@ -241,7 +258,7 @@ impl App {
         if let Some(Payload::MidiFx(kind)) = self.drop_target(ui, ui.min_rect(), |p| matches!(p, Payload::MidiFx(_))) {
             self.add_midi_fx(track, kind, None);
         }
-        if inst.params != before || inst.samples != before_samples {
+        if inst.params != before || inst.samples != before_samples || inst.pads != before_pads || inst.zones != before_zones {
             if let Some(t) = self.project.track_mut(track) {
                 t.instrument = inst;
             }
@@ -379,7 +396,7 @@ impl App {
         self.touch();
     }
 
-    fn simpler_sample_view(&mut self, ui: &mut egui::Ui, track: u64, inst: &mut Instrument) {
+    fn sample_view(&mut self, ui: &mut egui::Ui, track: u64, inst: &mut Instrument) {
         use params::smp;
         let path = inst.samples.first().cloned().flatten();
         let (rect, resp) = ui.allocate_exact_size(vec2(520.0, 58.0), Sense::click());
@@ -393,11 +410,18 @@ impl App {
                     let x = rect.left() + i as f32;
                     p.line_segment([egui::pos2(x, mid - hi * rect.height() * 0.48), egui::pos2(x, mid - lo * rect.height() * 0.48)], egui::Stroke::new(1.0_f32, BLUE));
                 }
-                let sx = rect.left() + inst.params[smp::START] * rect.width();
-                let ex = rect.left() + inst.params[smp::END] * rect.width();
+                if inst.kind == InstrumentKind::GrainCloud {
+                    use params::grain;
+                    let x = rect.left() + inst.params[grain::POS] * rect.width();
+                    let w = inst.params[grain::SPRAY] * rect.width() * 0.5;
+                    p.rect_filled(egui::Rect::from_x_y_ranges(x..=x + w.max(2.0), rect.y_range()), 0.0, ACCENT.gamma_multiply(0.3));
+                    p.line_segment([egui::pos2(x, rect.top()), egui::pos2(x, rect.bottom())], egui::Stroke::new(1.5_f32, ACCENT));
+                }
+                let sx = rect.left() + if inst.kind == InstrumentKind::Sampler { inst.params[smp::START] } else { 0.0 } * rect.width();
+                let ex = rect.left() + if inst.kind == InstrumentKind::Sampler { inst.params[smp::END] } else { 1.0 } * rect.width();
                 p.rect_filled(egui::Rect::from_min_max(rect.min, egui::pos2(sx, rect.bottom())), 0.0, egui::Color32::from_black_alpha(140));
                 p.rect_filled(egui::Rect::from_min_max(egui::pos2(ex, rect.top()), rect.max), 0.0, egui::Color32::from_black_alpha(140));
-                if inst.params[smp::MODE].round() as i32 == 2 {
+                if inst.kind == InstrumentKind::Sampler && inst.params[smp::MODE].round() as i32 == 2 {
                     let n = inst.params[smp::SLICES].round().max(1.0) as usize;
                     for k in 0..n {
                         let x = sx + (ex - sx) * k as f32 / n as f32;

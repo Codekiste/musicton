@@ -46,6 +46,9 @@ impl App {
             "rack" => self.cmd_rack(a),
             "modulator" => self.cmd_modulator(a),
             "get_device_meter" => return Some(self.cmd_meter(a)),
+            "set_pad" => self.cmd_pad(a),
+            "set_zones" => self.cmd_zones(a),
+            "slices_to_clip" => self.cmd_slices(a),
             _ => return None,
         };
         if r.is_ok() {
@@ -74,6 +77,113 @@ impl App {
             _ => o["raw"] = json!(data.iter().take(16).collect::<Vec<_>>()),
         }
         Ok(o)
+    }
+
+    fn cmd_pad(&mut self, a: &Value) -> R {
+        let tid = self.resolve_track(a.get("track"))?;
+        let i = u(a, "pad").ok_or("missing 'pad' (0-15)")? as usize;
+        let sample = match s(a, "sample") {
+            Some("") => Some(None),
+            Some(p) => {
+                crate::audio::samples::load(p)?;
+                Some(Some(p.to_string()))
+            }
+            None => None,
+        };
+        let device = match s(a, "add_device") {
+            Some(n) => Some(DeviceKind::all().find(|k| k.name().eq_ignore_ascii_case(n) && *k != DeviceKind::Rack).ok_or(format!("unknown effect '{n}'"))?),
+            None => None,
+        };
+        let new_id = self.project.new_id();
+        let t = self.project.track_mut(tid).unwrap();
+        if t.instrument.kind != InstrumentKind::BeatPads {
+            return Err("track is not a Beat Pads instrument".into());
+        }
+        let pad = t.instrument.pads.get_mut(i).ok_or("pad must be 0-15")?;
+        if let Some(smp) = sample {
+            if let Some(p) = &smp {
+                pad.name = std::path::Path::new(p).file_stem().map(|f| f.to_string_lossy().chars().take(14).collect()).unwrap_or_default();
+            }
+            pad.sample = smp;
+        }
+        if let Some(n) = s(a, "name") {
+            pad.name = n.to_string();
+        }
+        if let Some(v) = s(a, "voice") {
+            pad.voice = crate::params::DRUM_LANES.iter().position(|l| l.eq_ignore_ascii_case(v)).ok_or(format!("voice must be one of {:?}", crate::params::DRUM_LANES))? as u8;
+        }
+        if let Some(v) = f(a, "tune") {
+            pad.tune = v.clamp(-24.0, 24.0);
+        }
+        if let Some(v) = f(a, "gain_db") {
+            pad.gain = v.clamp(-60.0, 12.0);
+        }
+        if let Some(v) = f(a, "pan") {
+            pad.pan = v.clamp(-1.0, 1.0);
+        }
+        if let Some(v) = f(a, "decay") {
+            pad.decay = v.clamp(0.02, 8.0);
+        }
+        if let Some(v) = u(a, "choke") {
+            pad.choke = (v as u8).min(4);
+        }
+        if let Some(v) = b(a, "reverse") {
+            pad.reverse = v;
+        }
+        let mut out = json!({ "pad": i, "name": pad.name });
+        if let Some(k) = device {
+            pad.devices.push(Device::new(new_id, k));
+            out["device_id"] = json!(new_id);
+        }
+        Ok(out)
+    }
+
+    fn cmd_zones(&mut self, a: &Value) -> R {
+        let tid = self.resolve_track(a.get("track"))?;
+        let mut files: Vec<String> = match (s(a, "folder"), a.get("files").and_then(|v| v.as_array())) {
+            (Some(dir), _) => std::fs::read_dir(dir)
+                .map_err(|e| e.to_string())?
+                .filter_map(|e| e.ok())
+                .map(|e| e.path())
+                .filter(|p| p.extension().is_some_and(|x| x.eq_ignore_ascii_case("wav")))
+                .map(|p| p.to_string_lossy().to_string())
+                .collect(),
+            (None, Some(list)) => list.iter().filter_map(|v| v.as_str().map(str::to_string)).collect(),
+            _ => return Err("give 'folder' or 'files'".into()),
+        };
+        files.sort();
+        files.retain(|p| crate::audio::samples::load(p).is_ok());
+        let zones = zones_from_files(&files);
+        let t = self.project.track_mut(tid).unwrap();
+        if t.instrument.kind != InstrumentKind::MultiSampler {
+            return Err("track is not a Multi Sampler".into());
+        }
+        t.instrument.zones = zones;
+        Ok(json!({ "zones": t.instrument.zones.iter().map(|z| json!({"file": z.path, "root": note_name(z.root), "low": note_name(z.lo), "high": note_name(z.hi)})).collect::<Vec<_>>() }))
+    }
+
+    fn cmd_slices(&mut self, a: &Value) -> R {
+        use crate::params::slicer;
+        let tid = self.resolve_track(a.get("track"))?;
+        let t = self.project.track(tid).unwrap();
+        if t.instrument.kind != InstrumentKind::Slicer {
+            return Err("track is not a Slicer".into());
+        }
+        let path = t.instrument.samples.first().cloned().flatten().ok_or("load a sample into the Slicer first (musicton_load_sample)")?;
+        let smp = crate::audio::samples::load(&path)?;
+        let p = &t.instrument.params;
+        let slices = crate::audio::samplers::detect_slices(&smp, p[slicer::MODE].round() as usize, p[slicer::SENS]);
+        let beats = if p[slicer::SYNC] > 0.5 { p[slicer::BEATS] } else { smp.left.len() as f32 / smp.sample_rate * self.project.bpm / 60.0 };
+        let steps = ((beats * 4.0).round() as u32).max(1);
+        let mut clip = Clip::new("Slices", t.color, steps.div_ceil(STEPS_PER_BAR).max(1));
+        clip.notes = crate::audio::samplers::slice_notes(&slices, smp.left.len(), steps);
+        let scene = match u(a, "scene") {
+            Some(sc) => sc as usize,
+            None => t.clips.iter().position(|c| c.is_none()).ok_or("no free clip slot")?,
+        };
+        let n = clip.notes.len();
+        self.create_clip(tid, scene, clip);
+        Ok(json!({ "scene": scene, "slices": slices.len(), "notes": n }))
     }
 
     fn cmd_arranger(&mut self, a: &Value) -> R {

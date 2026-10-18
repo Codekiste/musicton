@@ -50,7 +50,7 @@ Audio läuft über ALSA bzw. PipeWire/PulseAudio (Standardgerät). Ein angeschlo
 - Editor Panel: Clip Editor (Step-Sequencer, Piano Roll mit Velocity-, Accent- und Slide-Lane, Audio-Clip-Editor) und Device Chain (Kette aus Macros, MIDI-Effekten, Instrument und Audio-Effekten)
 - Browser mit Kategorien und Suche, Help Panel (Hover-Hilfe zu jedem Element)
 
-**Instrumente:** B-303 Bassline (Acid-Bassline: Diodenkaskaden-artiges Filter, Accent-Sweep, Slide, interner Sequencer mit 8 Patterns, Shuffle, Scale, 5 Play-Modes, Drive- und Delay-Sektion, eigenes Plugin-Fenster) · Nexa (Preset-Rompler: 53 Presets in 10 Kategorien, bis zu 4 Layer, Macros, Arpeggiator, Trancegate, Effekte) · Drum Machine (10 Lanes, synthetisiert oder mit WAV pro Lane) · Acid Bass (mit Accent/Slide) · Poly Synth · Sampler (Classic/One-Shot/Slice, Tempo-Sync) · FM4 (4-Operator-FM, 8 Algorithmen) · Morph (Wavetable-Synth, 5 Tabellen, LFO/Env auf Position) · String Model (Karplus-Strong-Saite)
+**Instrumente:** Voltage (Analog-Polysynth: zwei Oszillatoren mit Pulsbreitenmodulation, Sub, Noise, 24/12-dB-Filter mit Drive, zwei Hüllkurven, LFO, Unison, Glide, Analog-Drift) · Matrix FM (6 Operatoren mit freier Modulationsmatrix inklusive Feedback, Hüllkurve und Ausgangspegel pro Operator) · Grain Cloud (Granular-Pad aus eigenen WAVs oder eingebauten Quellen, mit Scan, Spray, Pitch-Streuung, Oktaven und Reverse-Grains) · Beat Pads (16 Pads mit Sample oder Synth-Drum, Tuning, Decay, Choke-Gruppen und eigener Effektkette pro Pad) · Multi Sampler (Key- und Velocity-Zonen, Round Robin, Ordner-Import mit Notenerkennung im Dateinamen) · Slicer (zerlegt Loops an Transienten oder im Raster, Slices ab C1 spielbar, mit „Slices to Clip“) · B-303 Bassline (Acid-Bassline: Diodenkaskaden-artiges Filter, Accent-Sweep, Slide, interner Sequencer mit 8 Patterns, Shuffle, Scale, 5 Play-Modes, Drive- und Delay-Sektion, eigenes Plugin-Fenster) · Nexa (Preset-Rompler: 53 Presets in 10 Kategorien, bis zu 4 Layer, Macros, Arpeggiator, Trancegate, Effekte) · Drum Machine (10 Lanes, synthetisiert oder mit WAV pro Lane) · Acid Bass (mit Accent/Slide) · Poly Synth · Sampler (Classic/One-Shot/Slice, Tempo-Sync) · FM4 (4-Operator-FM, 8 Algorithmen) · Morph (Wavetable-Synth, 5 Tabellen, LFO/Env auf Position) · String Model (Karplus-Strong-Saite)
 
 **Audio-Effekte (43):** Beat Mangler, Heat Stack, Hybrid Reverb, Transient Shaper, Maximizer, True Peak Limiter, Stereo Imager, Filter Sweep, Pan LFO, Stutter, Channel EQ, Chorus, Compressor, Body Resonator, Drum Shaper, Tube Drive, Echo, Parametric EQ (mit Kurve), DJ EQ, Degrader, Triple Delay, Flanger, Frequency Shifter, Gate, Bus Compressor, Grain Delay, Limiter, Multiband Compressor (Upward- und Downward-Kompression), Overdrive, Pedal, Phaser, Ping Pong Delay, Bitcrusher, Chord Resonator, Reverb, Saturator, Sidechain, Stereo Delay, Spectrum, Tuner, Utility, Vinyl, Vocoder
 
@@ -113,13 +113,13 @@ Audio läuft über ALSA bzw. PipeWire/PulseAudio (Standardgerät). Ein angeschlo
 
 ## Noch nicht enthalten
 
-Netzwerk-Tempo-Sync, Audio-to-MIDI, Sampler-Multisampling, Clip-Hüllkurven und Tempo-Automation, Freeze/Flatten, VST/LV2-Plug-ins.
+Netzwerk-Tempo-Sync, Audio-to-MIDI, Clip-Hüllkurven und Tempo-Automation, Freeze/Flatten, VST/LV2-Plug-ins.
 
 ## Fernsteuerung per MCP (für KI-Assistenten)
 
 Musicton öffnet beim Start einen lokalen Steuer-Port (`127.0.0.1:47800`, nur lokal erreichbar; abschalten mit `MUSICTON_NO_REMOTE=1`, anderer Port mit `MUSICTON_PORT`). Der MCP-Server `musicton-mcp` übersetzt MCP-Tool-Aufrufe darauf. Claude Code findet ihn über die `.mcp.json` im Projektordner.
 
-Die 54 Tools decken ab:
+Die 57 Tools decken ab:
 - **Zustand:** Projekt, Spuren, Clips mit Noten, Devices mit allen Parametern, Meter
 - **Transport und Launch:** Abspielen, Stoppen, Clips und Szenen starten
 - **Bearbeiten:** Spuren, Clips, Noten, Devices, Parameter, Automation, Timeline

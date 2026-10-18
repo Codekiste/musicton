@@ -1,7 +1,7 @@
 //! Instrument presets, clip patterns and the demo project.
 
 use crate::model::*;
-use crate::params::{self, bass, lane_param, fmop, smp, synth, tension, wavetable, LANE_DECAY, LANE_LEVEL, LANE_TONE, LANE_TUNE, OP_PARAMS};
+use crate::params::{self, bass, grain, mfm, mfm_mod, mfm_param, volt, lane_param, fmop, smp, synth, strm, wavetable, LANE_DECAY, LANE_LEVEL, LANE_TONE, LANE_TUNE, OP_PARAMS};
 
 pub struct InstrumentPreset {
     pub name: &'static str,
@@ -21,6 +21,118 @@ impl InstrumentPreset {
 }
 
 pub static INSTRUMENT_PRESETS: &[InstrumentPreset] = &[
+    InstrumentPreset {
+        name: "Multi Sampler",
+        kind: InstrumentKind::MultiSampler,
+        info: "Empty multisample instrument - load a folder of WAVs (notes in the file names map the keys).",
+        overrides: || vec![],
+    },
+    InstrumentPreset {
+        name: "Slicer",
+        kind: InstrumentKind::Slicer,
+        info: "Drop a drum loop, it gets chopped at its hits - play the slices from C1 or turn them into a clip.",
+        overrides: || vec![],
+    },
+    InstrumentPreset {
+        name: "Beat Pads",
+        kind: InstrumentKind::BeatPads,
+        info: "Sixteen pads with synthesized drums to start from - drop your own samples on any pad, give each pad its own effects and choke groups.",
+        overrides: || vec![],
+    },
+    InstrumentPreset {
+        name: "Voltage Brass",
+        kind: InstrumentKind::Voltage,
+        info: "Fat two-saw brass with a filter swell - big stabs and chords.",
+        overrides: || vec![(volt::FA, 0.08), (volt::FD, 0.6), (volt::FENV, 0.55), (volt::CUTOFF, 900.0), (volt::DET2, 9.0)],
+    },
+    InstrumentPreset {
+        name: "Voltage Pluck",
+        kind: InstrumentKind::Voltage,
+        info: "Short, snappy pluck with resonant envelope - arps and melodies.",
+        overrides: || vec![(volt::CUTOFF, 400.0), (volt::RES, 0.45), (volt::FENV, 0.8), (volt::FD, 0.18), (volt::FS, 0.0), (volt::AD, 0.3), (volt::AS, 0.0), (volt::AR, 0.2)],
+    },
+    InstrumentPreset {
+        name: "Voltage Pad",
+        kind: InstrumentKind::Voltage,
+        info: "Slow, wide unison pad with PWM movement.",
+        overrides: || vec![(volt::W1, 1.0), (volt::W2, 0.0), (volt::UNISON, 3.0), (volt::SPREAD, 18.0), (volt::AA, 1.2), (volt::AR, 2.5), (volt::L_PW, 0.6), (volt::LRATE, 0.4), (volt::CUTOFF, 1800.0), (volt::FENV, 0.15)],
+    },
+    InstrumentPreset {
+        name: "Voltage Mono Bass",
+        kind: InstrumentKind::Voltage,
+        info: "Monophonic bass with sub, drive and glide.",
+        overrides: || vec![(volt::VOICES, 1.0), (volt::OCT1, -1.0), (volt::SUB, 0.6), (volt::DRIVE, 0.5), (volt::GLIDE, 0.08), (volt::CUTOFF, 500.0), (volt::FENV, 0.5), (volt::FD, 0.25), (volt::AS, 0.9)],
+    },
+    InstrumentPreset {
+        name: "Voltage Sync Lead",
+        kind: InstrumentKind::Voltage,
+        info: "Bright lead with fifths, vibrato and glide.",
+        overrides: || vec![(volt::SEMI2, 7.0), (volt::DET2, 4.0), (volt::CUTOFF, 4500.0), (volt::L_PITCH, 0.12), (volt::LRATE, 5.5), (volt::GLIDE, 0.05), (volt::VOICES, 1.0)],
+    },
+    InstrumentPreset {
+        name: "Matrix Bell",
+        kind: InstrumentKind::MatrixFm,
+        info: "Glassy bell from an inharmonic modulator.",
+        overrides: || vec![(mfm_param(1, mfm::RATIO), 3.5), (mfm_mod(1, 0), 0.5), (mfm_param(0, mfm::S), 0.0), (mfm_param(0, mfm::D), 2.5), (mfm_param(1, mfm::D), 1.5)],
+    },
+    InstrumentPreset {
+        name: "Matrix Bass",
+        kind: InstrumentKind::MatrixFm,
+        info: "Punchy FM bass with feedback growl.",
+        overrides: || vec![(mfm_param(1, mfm::RATIO), 1.0), (mfm_mod(1, 0), 0.55), (mfm_mod(1, 1), 0.4), (mfm_param(1, mfm::D), 0.25), (mfm_param(1, mfm::S), 0.1), (mfm::VOICES, 1.0)],
+    },
+    InstrumentPreset {
+        name: "Matrix E-Piano",
+        kind: InstrumentKind::MatrixFm,
+        info: "Classic FM electric piano: two operator pairs.",
+        overrides: || {
+            vec![
+                (mfm_param(1, mfm::RATIO), 14.0),
+                (mfm_mod(1, 0), 0.25),
+                (mfm_param(2, mfm::RATIO), 1.0),
+                (mfm_param(2, mfm::OUT), 0.8),
+                (mfm_param(2, mfm::LEVEL), 0.8),
+                (mfm_param(3, mfm::RATIO), 1.0),
+                (mfm_mod(3, 2), 0.4),
+                (mfm_param(0, mfm::S), 0.0),
+                (mfm_param(0, mfm::D), 1.8),
+                (mfm_param(2, mfm::S), 0.0),
+                (mfm_param(2, mfm::D), 2.2),
+                (mfm_param(1, mfm::D), 0.3),
+                (mfm_param(1, mfm::S), 0.0),
+            ]
+        },
+    },
+    InstrumentPreset {
+        name: "Matrix Metal Stab",
+        kind: InstrumentKind::MatrixFm,
+        info: "Harsh cross-modulated stab for industrial techno.",
+        overrides: || vec![(mfm_mod(1, 0), 0.7), (mfm_mod(2, 1), 0.6), (mfm_mod(0, 2), 0.3), (mfm_param(2, mfm::RATIO), 2.75), (mfm_param(0, mfm::S), 0.0), (mfm_param(0, mfm::D), 0.35)],
+    },
+    InstrumentPreset {
+        name: "Cloud Glass",
+        kind: InstrumentKind::GrainCloud,
+        info: "Shimmering glass pad grains with octave sparkle.",
+        overrides: || vec![],
+    },
+    InstrumentPreset {
+        name: "Cloud Choir",
+        kind: InstrumentKind::GrainCloud,
+        info: "Breathy vowel-like grain choir.",
+        overrides: || vec![(grain::SOURCE, 2.0), (grain::SIZE, 0.2), (grain::DENSITY, 20.0), (grain::OCTAVE_MIX, 0.0)],
+    },
+    InstrumentPreset {
+        name: "Cloud Strings",
+        kind: InstrumentKind::GrainCloud,
+        info: "Slowly evolving granular string ensemble.",
+        overrides: || vec![(grain::SOURCE, 3.0), (grain::SCAN, 0.2), (grain::SIZE, 0.25), (grain::REVERSE, 0.0)],
+    },
+    InstrumentPreset {
+        name: "Cloud Noise Wash",
+        kind: InstrumentKind::GrainCloud,
+        info: "Filtered noise texture for risers and atmospheres.",
+        overrides: || vec![(grain::SOURCE, 4.0), (grain::DENSITY, 80.0), (grain::SIZE, 0.05), (grain::CUTOFF, 4000.0)],
+    },
     InstrumentPreset {
         name: "Punch Kit",
         kind: InstrumentKind::Drums,
@@ -209,7 +321,7 @@ pub static INSTRUMENT_PRESETS: &[InstrumentPreset] = &[
         overrides: || vec![],
     },
     InstrumentPreset {
-        name: "Loop Slicer",
+        name: "Sampler Slices",
         kind: InstrumentKind::Sampler,
         info: "Slice mode: the sample is cut into 16 slices on C1 upwards, synced to the tempo. Load a drum break and rearrange it.",
         overrides: || vec![(smp::MODE, 2.0), (smp::SLICES, 16.0), (smp::WARP, 1.0), (smp::BEATS, 4.0), (smp::RELEASE, 0.02)],
@@ -353,13 +465,13 @@ pub static INSTRUMENT_PRESETS: &[InstrumentPreset] = &[
         name: "Hammered Dulcimer",
         kind: InstrumentKind::StringModel,
         info: "Bright hammered string with stiffness.",
-        overrides: || vec![(tension::EXCITER, 1.0), (tension::INHARM, 0.3), (tension::DAMPING, 0.2), (tension::BRIGHT, 0.9)],
+        overrides: || vec![(strm::EXCITER, 1.0), (strm::INHARM, 0.3), (strm::DAMPING, 0.2), (strm::BRIGHT, 0.9)],
     },
     InstrumentPreset {
         name: "Bowed Drone",
         kind: InstrumentKind::StringModel,
         info: "Continuously bowed string - dark techno drones.",
-        overrides: || vec![(tension::EXCITER, 2.0), (tension::DECAY, 0.9), (tension::DAMPING, 0.6), (tension::VIBRATO, 0.3), (tension::BODY, 0.6)],
+        overrides: || vec![(strm::EXCITER, 2.0), (strm::DECAY, 0.9), (strm::DAMPING, 0.6), (strm::VIBRATO, 0.3), (strm::BODY, 0.6)],
     },
 ];
 
