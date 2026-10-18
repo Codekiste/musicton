@@ -28,7 +28,7 @@ fn rms(x: &[f32]) -> f32 {
 fn pad(p: &mut Project) -> u64 {
     let id = p.add_track("Pad", InstrumentKind::Synth, CLIP_COLORS[0]);
     let mut clip = Clip::new("pad", CLIP_COLORS[0], 1);
-    clip.notes.push(Note { step: 0, len: 16, pitch: 48, vel: 110, slide: false });
+    clip.notes.push(Note { step: 0, len: 16, pitch: 48, vel: 110, slide: false, skip: 0 });
     p.track_mut(id).unwrap().clips[0] = Some(clip);
     id
 }
@@ -37,7 +37,7 @@ fn kicks(p: &mut Project) -> u64 {
     let id = p.add_track("Kick", InstrumentKind::Drums, CLIP_COLORS[1]);
     let mut clip = Clip::new("kick", CLIP_COLORS[1], 1);
     for s in (0..16).step_by(4) {
-        clip.notes.push(Note { step: s, len: 1, pitch: 0, vel: 127, slide: false });
+        clip.notes.push(Note { step: s, len: 1, pitch: 0, vel: 127, slide: false, skip: 0 });
     }
     p.track_mut(id).unwrap().clips[0] = Some(clip);
     id

@@ -49,6 +49,18 @@ impl App {
             "set_pad" => self.cmd_pad(a),
             "set_zones" => self.cmd_zones(a),
             "slices_to_clip" => self.cmd_slices(a),
+            "chord_track" => self.cmd_chords(a),
+            "set_follow_chords" => {
+                let tid = match self.resolve_track(a.get("track")) {
+                    Ok(t) => t,
+                    Err(e) => return Some(Err(e)),
+                };
+                let on = b(a, "on").unwrap_or(true);
+                self.project.track_mut(tid).unwrap().follow_chords = on;
+                Ok(json!({ "follow_chords": on }))
+            }
+            "transform_clip" => self.cmd_transform(a),
+            "add_chord_to_clip" => self.cmd_clip_chord(a),
             _ => return None,
         };
         if r.is_ok() {
@@ -184,6 +196,81 @@ impl App {
         let n = clip.notes.len();
         self.create_clip(tid, scene, clip);
         Ok(json!({ "scene": scene, "slices": slices.len(), "notes": n }))
+    }
+
+    fn cmd_chords(&mut self, a: &Value) -> R {
+        match s(a, "action").ok_or("missing 'action' (set, add, delete, clear)")? {
+            "set" => {
+                // "Am F C G" over 'bars_each' bars from 'start_bar'.
+                let prog = s(a, "progression").ok_or("missing 'progression', e.g. \"Am F C G\"")?;
+                let each = bars(a, "bars_each").unwrap_or(16);
+                let mut pos = bar(a, "start_bar").unwrap_or(0);
+                let reps = u(a, "repeat").unwrap_or(1).max(1);
+                let parsed: Vec<(u8, usize)> = prog.split_whitespace().map(|c| parse_chord(c).ok_or(format!("unknown chord '{c}'"))).collect::<Result<_, _>>()?;
+                if b(a, "replace").unwrap_or(true) {
+                    self.project.chords.clear();
+                }
+                for _ in 0..reps {
+                    for &(root, q) in &parsed {
+                        self.add_chord_event(pos, each, root, q);
+                        pos += each;
+                    }
+                }
+                Ok(json!({ "chords": self.project.chords.iter().map(|c| json!({"id": c.id, "name": c.name(), "start_bar": c.start as f32 / 16.0 + 1.0, "bars": c.len as f32 / 16.0})).collect::<Vec<_>>() }))
+            }
+            "add" => {
+                let (root, q) = parse_chord(s(a, "chord").ok_or("missing 'chord'")?).ok_or("unknown chord")?;
+                let id = self.add_chord_event(bar(a, "start_bar").unwrap_or(0), bars(a, "bars").unwrap_or(16), root, q);
+                Ok(json!({ "chord_id": id }))
+            }
+            "delete" => {
+                let id = u(a, "id").ok_or("missing 'id'")?;
+                self.project.chords.retain(|c| c.id != id);
+                Ok(json!("deleted"))
+            }
+            "clear" => {
+                self.project.chords.clear();
+                Ok(json!("cleared"))
+            }
+            other => Err(format!("unknown action '{other}'")),
+        }
+    }
+
+    fn clip_ref(&self, a: &Value) -> Result<super::ClipRef, String> {
+        let track = self.resolve_track(a.get("track"))?;
+        Ok(match u(a, "arrangement_clip_id") {
+            Some(id) => super::ClipRef::Arr { track, id },
+            None => super::ClipRef::Session { track, scene: self.scene_arg(a)? },
+        })
+    }
+
+    fn cmd_transform(&mut self, a: &Value) -> R {
+        let r = self.clip_ref(a)?;
+        let rules: Vec<NoteRule> = if let Some(name) = s(a, "preset") {
+            rule_presets().into_iter().find(|(n, _)| n.eq_ignore_ascii_case(name)).map(|(_, r)| r).ok_or_else(|| format!("unknown preset; available: {:?}", rule_presets().iter().map(|p| p.0).collect::<Vec<_>>()))?
+        } else {
+            serde_json::from_value(a.get("rules").cloned().ok_or("give 'preset' or 'rules'")?).map_err(|e| format!("rules: {e}. Example: [{{\"field\":\"Velocity\",\"op\":\"Less\",\"a\":40,\"b\":0,\"action\":\"Delete\",\"value\":0}}]"))?
+        };
+        let seed = u(a, "seed").unwrap_or(1) as u32;
+        let c = self.clip_mut(r).ok_or("no clip there")?;
+        let n = apply_rules(&mut c.notes, &rules, seed);
+        Ok(json!({ "touched": n, "notes": c.notes.len() }))
+    }
+
+    fn cmd_clip_chord(&mut self, a: &Value) -> R {
+        let r = self.clip_ref(a)?;
+        let (root, q) = parse_chord(s(a, "chord").ok_or("missing 'chord' (e.g. Am7)")?).ok_or("unknown chord")?;
+        let octave = a.get("octave").and_then(|v| v.as_i64()).unwrap_or(3) as i32;
+        let step = u(a, "step").unwrap_or(0) as u32;
+        let len = u(a, "len").unwrap_or(16) as u32;
+        let vel = u(a, "vel").unwrap_or(100).clamp(1, 127) as u8;
+        let base = ((octave + 2) * 12 + root as i32).clamp(0, 115) as u8;
+        let notes = ChordEvent { id: 0, start: 0, len: 0, root, quality: q }.voicing(base);
+        let c = self.clip_mut(r).ok_or("no clip there")?;
+        for p in &notes {
+            c.notes.push(Note { step, len, pitch: *p, vel, slide: false, skip: 0 });
+        }
+        Ok(json!({ "added": notes.iter().map(|p| note_name(*p)).collect::<Vec<_>>() }))
     }
 
     fn cmd_arranger(&mut self, a: &Value) -> R {

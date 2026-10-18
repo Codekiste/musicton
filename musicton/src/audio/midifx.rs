@@ -13,11 +13,21 @@ pub struct Ev {
     pub slide: bool,
     /// Original live pitch, used to match note offs through the chain.
     pub src: u8,
+    /// Samples to wait before the note starts (strumming).
+    pub delay: u32,
 }
 
 pub trait MidiFxDsp: Send {
     fn set_params(&mut self, p: &[f32]);
     fn process(&mut self, e: Ev, ctx: &FxCtx, out: &mut Vec<Ev>);
+    /// All events that start together (one step or one live chord); defaults to `process`.
+    fn process_batch(&mut self, evs: Vec<Ev>, ctx: &FxCtx) -> Vec<Ev> {
+        let mut out = Vec::with_capacity(evs.len());
+        for e in evs {
+            self.process(e, ctx, &mut out);
+        }
+        out
+    }
     fn note_off(&mut self, _src: u8) {}
     /// Called on every 16th step while the transport runs (generators like the arpeggiator).
     fn tick(&mut self, _tick: u64, _ctx: &FxCtx, _out: &mut Vec<Ev>) {}
@@ -39,6 +49,7 @@ pub fn create(kind: MidiFxKind) -> Box<dyn MidiFxDsp> {
         MidiFxKind::Random => Box::new(Random { p: vec![], rng: Rng::new(31337) }),
         MidiFxKind::Scale => Box::new(Scale::default()),
         MidiFxKind::Velocity => Box::new(Velocity { p: vec![], rng: Rng::new(4711) }),
+        MidiFxKind::Strum => Box::new(Strum { p: vec![0.0; 4], rng: Rng::new(99), flip: false }),
     }
 }
 
@@ -345,5 +356,53 @@ impl MidiFxDsp for Arp {
     fn reset(&mut self) {
         self.held.clear();
         self.step = 0;
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+
+struct Strum {
+    p: Vec<f32>,
+    rng: Rng,
+    flip: bool,
+}
+
+impl MidiFxDsp for Strum {
+    fn set_params(&mut self, p: &[f32]) {
+        self.p = p.to_vec();
+    }
+    fn process(&mut self, e: Ev, _: &FxCtx, out: &mut Vec<Ev>) {
+        out.push(e);
+    }
+    fn process_batch(&mut self, mut evs: Vec<Ev>, ctx: &FxCtx) -> Vec<Ev> {
+        if evs.len() < 2 {
+            return evs;
+        }
+        evs.sort_by_key(|e| e.pitch);
+        let dir = self.p[1].round() as i32;
+        let down = match dir {
+            1 => true,
+            2 => {
+                self.flip = !self.flip;
+                self.flip
+            }
+            3 => self.rng.next() > 0.0,
+            _ => false,
+        };
+        if down {
+            evs.reverse();
+        }
+        let step = self.p[0] / 1000.0 * ctx.sr;
+        let n = evs.len() as f32;
+        for (k, e) in evs.iter_mut().enumerate() {
+            let jitter = 1.0 + self.rng.next() * self.p[3] * 0.5;
+            e.delay += (k as f32 * step * jitter).max(0.0) as u32;
+            let slope = 1.0 + self.p[2] * (k as f32 / (n - 1.0) * 2.0 - 1.0);
+            e.vel = ((e.vel as f32 * slope).round() as i32).clamp(1, 127) as u8;
+            if let Some(g) = e.gate.as_mut() {
+                *g = g.saturating_sub(e.delay).max(64);
+            }
+        }
+        evs
     }
 }

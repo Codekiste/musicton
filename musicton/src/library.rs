@@ -64,7 +64,7 @@ fn one_track(inst: Instrument, notes: Vec<Note>, bars: u32, fx: Vec<Device>, sen
 }
 
 fn note(step: u32, len: u32, pitch: u8, vel: u8) -> Note {
-    Note { step, len, pitch, vel, slide: false }
+    Note { step, len, pitch, vel, slide: false, skip: 0 }
 }
 
 fn drum_hit(lane: usize, tune: f32, decay: f32, tone: f32, drive: f32) -> Vec<f32> {

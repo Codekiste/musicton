@@ -380,7 +380,7 @@ pub fn slice_notes(slices: &[usize], frames: usize, steps: u32) -> Vec<crate::mo
         if out.last().is_some_and(|n| n.step == step) {
             continue;
         }
-        out.push(crate::model::Note { step, len: next.saturating_sub(step).max(1), pitch: 36 + k as u8, vel: 100, slide: false });
+        out.push(crate::model::Note { step, len: next.saturating_sub(step).max(1), pitch: 36 + k as u8, vel: 100, slide: false, skip: 0 });
     }
     out
 }

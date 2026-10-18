@@ -4,6 +4,7 @@ mod arrangement;
 mod arranger;
 mod browser;
 mod clip_editor;
+mod composition_ui;
 mod devices;
 mod export;
 mod instruments_ui;
@@ -134,6 +135,7 @@ pub struct App {
     sel_scene: usize,
     sel_device: Option<u64>,
     rack: rack_ui::RackUiState,
+    chord_pads: composition_ui::ChordPadState,
     drag: Option<Payload>,
     info: Option<(String, String)>,
     kb_octave: i32,
@@ -235,6 +237,7 @@ impl App {
             sel_scene: 0,
             sel_device: None,
             rack: Default::default(),
+            chord_pads: Default::default(),
             drag: None,
             info: None,
             kb_octave: 4,
@@ -1021,7 +1024,7 @@ impl App {
         let len_steps = if is_drum { 1 } else { len.round().max(1.0) as u32 };
         let step = (local_raw.max(0.0) as u32) % clip.len.max(1);
         clip.notes.retain(|n| !(n.step == step && n.pitch == h.pitch));
-        clip.notes.push(Note { step, len: len_steps, pitch: h.pitch, vel: h.vel, slide: false });
+        clip.notes.push(Note { step, len: len_steps, pitch: h.pitch, vel: h.vel, slide: false, skip: 0 });
         self.touch();
     }
 
@@ -1048,7 +1051,7 @@ impl App {
             if clip.notes.iter().any(|x| x.step == step && x.pitch == n.pitch) {
                 continue;
             }
-            clip.notes.push(Note { step, len: if is_drum { 1 } else { n.len.round().max(1.0) as u32 }, pitch: n.pitch, vel: n.vel, slide: false });
+            clip.notes.push(Note { step, len: if is_drum { 1 } else { n.len.round().max(1.0) as u32 }, pitch: n.pitch, vel: n.vel, slide: false, skip: 0 });
         }
         let scene = (self.sel_scene..t.clips.len()).chain(0..self.sel_scene).find(|&s| t.clips[s].is_none());
         match scene {
@@ -1464,6 +1467,8 @@ impl eframe::App for App {
         self.export_window(ctx);
         self.mappings_window(ctx);
         self.plugin_windows(ctx);
+        self.chord_pads_window(ctx);
+        self.rules_window(ctx);
         self.plugin_overlay_ui(ctx);
         self.update_arr_record();
         self.update_audio_record();

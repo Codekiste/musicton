@@ -12,6 +12,8 @@ mod tests_workflow;
 mod tests_effects;
 #[cfg(test)]
 mod tests_instruments;
+#[cfg(test)]
+mod tests_composition;
 
 fn main() -> eframe::Result {
     // `--x11` runs through XWayland: Wayland compositors pause hidden windows, which would also
@@ -113,7 +115,7 @@ mod tests {
             t.midi_fx.push(MidiFx::new(1000 + i as u64, *kind));
         }
         let mut clip = Clip::new("c", CLIP_COLORS[0], 1);
-        clip.notes.push(Note { step: 0, len: 16, pitch: 57, vel: 100, slide: false });
+        clip.notes.push(Note { step: 0, len: 16, pitch: 57, vel: 100, slide: false, skip: 0 });
         p.track_mut(id).unwrap().clips[0] = Some(clip);
         let out = render(p, 3.0, Some(0));
         assert!(out.iter().all(|s| s.is_finite()));
@@ -160,7 +162,7 @@ mod tests {
                     InstrumentKind::BeatPads => s as u8,
                     _ => 48 + s as u8 * 3,
                 };
-                clip.notes.push(Note { step: s * 4, len: 3, pitch, vel: 110, slide: false });
+                clip.notes.push(Note { step: s * 4, len: 3, pitch, vel: 110, slide: false, skip: 0 });
             }
             t.clips[0] = Some(clip);
             let out = render(p, 2.0, Some(0));
@@ -225,7 +227,7 @@ mod tests {
     #[test]
     fn nexa_presets_and_b303() {
         use crate::model::*;
-        let chord = |p: u8| vec![Note { step: 0, len: 12, pitch: p, vel: 110, slide: false }, Note { step: 0, len: 12, pitch: p + 3, vel: 100, slide: false }, Note { step: 0, len: 12, pitch: p + 7, vel: 100, slide: false }];
+        let chord = |p: u8| vec![Note { step: 0, len: 12, pitch: p, vel: 110, slide: false, skip: 0 }, Note { step: 0, len: 12, pitch: p + 3, vel: 100, slide: false, skip: 0 }, Note { step: 0, len: 12, pitch: p + 7, vel: 100, slide: false, skip: 0 }];
         let mut quiet = vec![];
         for (i, pr) in crate::audio::nexa::PRESETS.iter().enumerate() {
             let mut p = Project::empty();
@@ -283,7 +285,7 @@ mod tests {
                 }
             }
             let mut clip = Clip::new("c", CLIP_COLORS[0], 1);
-            clip.notes = vec![Note { step: 0, len: 12, pitch: 60, vel: 110, slide: false }, Note { step: 0, len: 12, pitch: 63, vel: 100, slide: false }, Note { step: 0, len: 12, pitch: 67, vel: 100, slide: false }];
+            clip.notes = vec![Note { step: 0, len: 12, pitch: 60, vel: 110, slide: false, skip: 0 }, Note { step: 0, len: 12, pitch: 63, vel: 100, slide: false, skip: 0 }, Note { step: 0, len: 12, pitch: 67, vel: 100, slide: false, skip: 0 }];
             t.clips[0] = Some(clip);
             let out = render(p, 3.5, Some(0));
             let (idx, peak) = out.iter().enumerate().fold((0, 0.0f32), |(bi, bm), (i, s)| if s.abs() > bm { (i, s.abs()) } else { (bi, bm) });

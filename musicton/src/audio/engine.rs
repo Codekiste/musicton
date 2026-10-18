@@ -248,6 +248,8 @@ struct TrackDsp {
     mods: Vec<ModState>,
     mod_vals: Vec<(AutoTarget, f32)>,
     mod_trigger: bool,
+    /// Delayed notes (strummed chords) waiting to start.
+    pending: Vec<Ev>,
     gin: [[f32; MAX_BLOCK]; 2],
     mfx: Vec<MfxDsp>,
     live_map: Vec<(u8, Vec<u8>)>,
@@ -285,14 +287,14 @@ impl TrackDsp {
     /// Runs events through the MIDI effects starting at `from` and plays the result.
     fn play_chain(&mut self, from: usize, mut evs: Vec<Ev>, ctx: &FxCtx) -> Vec<Ev> {
         for m in self.mfx.iter_mut().skip(from).filter(|m| m.on) {
-            let mut next = Vec::with_capacity(evs.len());
-            for e in evs {
-                m.fx.process(e, ctx, &mut next);
-            }
-            evs = next;
+            evs = m.fx.process_batch(evs, ctx);
         }
         for e in &evs {
-            self.inst.note_on(e.pitch, e.vel, e.gate, e.slide);
+            if e.delay > 0 {
+                self.pending.push(*e);
+            } else {
+                self.inst.note_on(e.pitch, e.vel, e.gate, e.slide);
+            }
         }
         if !evs.is_empty() {
             self.mod_trigger = true;
@@ -307,6 +309,7 @@ impl TrackDsp {
             mods: vec![],
             mod_vals: vec![],
             mod_trigger: false,
+            pending: Vec::with_capacity(16),
             gin: [[0.0; MAX_BLOCK]; 2],
             mfx: vec![],
             live_map: vec![],
@@ -584,6 +587,7 @@ impl Engine {
                     self.playing = false;
                     for td in &mut self.tracks {
                         td.inst.all_off();
+                        td.pending.clear();
                         td.playing = None;
                         td.queued = None;
                         td.arr_clip = None;
@@ -638,7 +642,7 @@ impl Engine {
             Cmd::NoteOn { track, pitch, vel } => {
                 let ctx = self.fx_ctx();
                 if let Some(td) = self.tracks.iter_mut().find(|t| t.id == track) {
-                    let out = td.play_chain(0, vec![Ev { pitch, vel, gate: None, slide: false, src: pitch }], &ctx);
+                    let out = td.play_chain(0, vec![Ev { pitch, vel, gate: None, slide: false, src: pitch, delay: 0 }], &ctx);
                     td.live_map.retain(|(p, _)| *p != pitch);
                     td.live_map.push((pitch, out.iter().filter(|e| e.gate.is_none()).map(|e| e.pitch).collect()));
                 }
@@ -794,6 +798,8 @@ impl Engine {
         }
         let arr = self.arr_pos;
         self.last_arr_pos = arr;
+        let chord = p.chord_at(arr).map(|c| c.classes());
+        let mut chance_rng = self.rng ^ (tick as u32).wrapping_mul(2654435761);
         for ti in 0..self.tracks.len() {
             let t = &p.tracks[ti];
             let td = &mut self.tracks[ti];
@@ -842,7 +848,18 @@ impl Engine {
                     } else {
                         gate -= step_len * 0.08;
                     }
-                    evs.push(Ev { pitch: n.pitch, vel: n.vel, gate: Some(gate.max(1.0) as u32), slide: n.slide, src: n.pitch });
+                    if n.skip > 0 {
+                        // Note probability.
+                        chance_rng = chance_rng.wrapping_mul(1664525).wrapping_add(1013904223);
+                        if ((chance_rng >> 8) % 100) < n.skip as u32 {
+                            continue;
+                        }
+                    }
+                    let pitch = match &chord {
+                        Some(cl) if t.follow_chords && !td.kind.is_drum_like() => snap_to_chord(n.pitch, cl),
+                        _ => n.pitch,
+                    };
+                    evs.push(Ev { pitch, vel: n.vel, gate: Some(gate.max(1.0) as u32), slide: n.slide, src: pitch, delay: 0 });
                 }
                 if !evs.is_empty() {
                     td.play_chain(0, evs, &fx_ctx);
@@ -873,6 +890,7 @@ impl Engine {
                 self.apply_track(ti, false);
             }
         }
+        self.rng = self.rng.wrapping_add(chance_rng | 1);
         self.dispatch_kicks();
         self.tick += 1;
         self.arr_pos += 1;
@@ -912,6 +930,16 @@ impl Engine {
             let td = &mut self.tracks[ti];
             sc_ch.l[..n].fill(0.0);
             sc_ch.r[..n].fill(0.0);
+            if !td.pending.is_empty() {
+                let n32 = n as u32;
+                for e in td.pending.iter_mut() {
+                    e.delay = e.delay.saturating_sub(n32);
+                }
+                while let Some(i) = td.pending.iter().position(|e| e.delay == 0) {
+                    let e = td.pending.swap_remove(i);
+                    td.inst.note_on(e.pitch, e.vel, e.gate, e.slide);
+                }
+            }
             if td.kind != InstrumentKind::Group {
                 td.inst.set_position(ctx.beat, ctx.playing);
                 td.inst.render(&mut sc_ch.l[..n], &mut sc_ch.r[..n]);

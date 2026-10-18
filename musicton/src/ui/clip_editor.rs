@@ -23,11 +23,30 @@ pub struct RollState {
     paint: Option<bool>,
     audition: Option<(u64, u8)>,
     clip: Option<ClipRef>,
+    /// Chord stamp: clicking draws this chord quality instead of one note.
+    pub stamp: Option<usize>,
+    /// Show the notes of the other tracks faintly behind this clip.
+    pub ghosts: bool,
+    pub rules_open: bool,
+    pub rules: Vec<NoteRule>,
 }
 
 impl Default for RollState {
     fn default() -> Self {
-        Self { top: 72.0, drag: None, selected: None, draw_len: 1, scroll_to_notes: true, paint: None, audition: None, clip: None }
+        Self {
+            top: 72.0,
+            drag: None,
+            selected: None,
+            draw_len: 1,
+            scroll_to_notes: true,
+            paint: None,
+            audition: None,
+            clip: None,
+            stamp: None,
+            ghosts: false,
+            rules_open: false,
+            rules: vec![NoteRule::new(RuleField::All, RuleOp::Equal, 0, 0, RuleAction::RandomVelocity, 10)],
+        }
     }
 }
 
@@ -216,6 +235,32 @@ impl App {
                     }
                 });
             });
+            ui.horizontal(|ui| {
+                ui.label("Stamp");
+                let cur = match self.roll.stamp {
+                    Some(q) => format!("Chord {}", if CHORD_QUALITIES[q].0.is_empty() { "maj" } else { CHORD_QUALITIES[q].0 }),
+                    None => "Single note".into(),
+                };
+                let r = egui::ComboBox::from_id_salt("stamp").width(84.0).selected_text(cur).show_ui(ui, |ui| {
+                    ui.selectable_value(&mut self.roll.stamp, None, "Single note");
+                    for (q, (name, _)) in CHORD_QUALITIES.iter().enumerate() {
+                        ui.selectable_value(&mut self.roll.stamp, Some(q), format!("Chord {}", if name.is_empty() { "maj" } else { name }));
+                    }
+                });
+                self.hint(&r.response, "Chord Stamp", "Clicking in the piano roll draws a whole chord with its root on the clicked key. Add a Strum MIDI effect to spread it in time.");
+            });
+            ui.horizontal(|ui| {
+                let r = widgets::toggle(ui, "Ghosts", self.roll.ghosts, ACCENT, vec2(52.0, 18.0));
+                if r.clicked() {
+                    self.roll.ghosts = !self.roll.ghosts;
+                }
+                self.hint(&r, "Ghost Notes", "Shows the notes of the other tracks (same scene, or overlapping on the timeline) faintly behind this clip - write basslines that fit the chords.");
+                let r = widgets::toggle(ui, "Rules...", self.roll.rules_open, ACCENT, vec2(52.0, 18.0));
+                if r.clicked() {
+                    self.roll.rules_open = !self.roll.rules_open;
+                }
+                self.hint(&r, "Note Rules", "Rule editor: if a note matches a condition (pitch, velocity, position ...), apply an action (transpose, velocity, length, chance, delete ...).");
+            });
             if let Some(i) = self.roll.selected {
                 if let Some(n) = c.notes.get_mut(i) {
                     ui.horizontal(|ui| {
@@ -228,13 +273,21 @@ impl App {
                             ui.checkbox(&mut n.slide, "Slide");
                         }
                     });
+                    ui.horizontal(|ui| {
+                        let mut chance = 100 - n.skip as i32;
+                        let r = ui.add(egui::DragValue::new(&mut chance).range(0..=100).prefix("Chance ").suffix(" %"));
+                        if r.changed() {
+                            n.skip = (100 - chance) as u8;
+                        }
+                        self.hint(&r, "Note Chance", "Probability that this note plays on each pass - keeps loops evolving.");
+                    });
                 }
             }
         } else if c.audio.is_none() {
             ui.add_space(4.0);
             ui.label(egui::RichText::new("Click: toggle step · Drag: paint\nRight-click: velocity · Wheel: velocity\nClick lane name: audition").size(10.0).color(TEXT_DIM));
         }
-        if c.name != clip.name || c.color != clip.color || c.len != clip.len || c.notes != clip.notes || c.follow != clip.follow {
+        if c.name != clip.name || c.color != clip.color || c.len != clip.len || c.notes != clip.notes || c.follow != clip.follow || c.gain != clip.gain {
             if let Some(dst) = self.clip_mut(r) {
                 *dst = c;
             }
@@ -338,6 +391,41 @@ impl App {
         }
     }
 
+    /// Notes of other melodic tracks that sound together with clip `r`, mapped into its steps.
+    fn ghost_notes(&self, r: ClipRef, len: u32) -> Vec<(Note, Color32)> {
+        let mut out = vec![];
+        match r {
+            ClipRef::Session { track, scene } => {
+                for t in self.project.tracks.iter().filter(|t| t.id != track && t.instrument.kind.is_melodic()) {
+                    if let Some(Some(c)) = t.clips.get(scene) {
+                        let cl = c.len.max(1);
+                        for rep in 0..len.div_ceil(cl) {
+                            out.extend(c.notes.iter().filter(|n| n.step < cl).map(|n| Note { step: n.step + rep * cl, ..*n }).filter(|n| n.step < len).map(|n| (n, color32(t.color))));
+                        }
+                    }
+                }
+            }
+            ClipRef::Arr { track, id } => {
+                let Some(me) = self.project.track(track).and_then(|t| t.arrangement.iter().find(|c| c.id == id)) else { return out };
+                let (s0, s1) = (me.start, me.start + len.min(me.len.max(len)));
+                for t in self.project.tracks.iter().filter(|t| t.id != track && t.instrument.kind.is_melodic()) {
+                    for ac in t.arrangement.iter().filter(|ac| ac.start < s1 && ac.start + ac.len > s0) {
+                        let cl = ac.clip.len.max(1);
+                        for rep in 0..ac.len.div_ceil(cl) {
+                            for n in ac.clip.notes.iter().filter(|n| n.step < cl) {
+                                let g = ac.start + rep * cl + n.step;
+                                if g >= s0 && g < s1 && g < ac.start + ac.len {
+                                    out.push((Note { step: g - s0, ..*n }, color32(t.color)));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        out
+    }
+
     fn step_sequencer(&mut self, ui: &mut egui::Ui, r: ClipRef, track: u64) {
         let Some(clip) = self.clip(r).cloned() else { return };
         let names = self.project.track(track).map(|t| t.instrument.lane_names()).unwrap_or_default();
@@ -423,7 +511,7 @@ impl App {
                             if let Some(i) = exists {
                                 notes[i].vel = if notes[i].vel >= 120 { 100 } else { 127 };
                             } else {
-                                notes.push(Note { step: s, len: 1, pitch: l, vel: 127, slide: false });
+                                notes.push(Note { step: s, len: 1, pitch: l, vel: 127, slide: false, skip: 0 });
                             }
                             self.roll.paint = None;
                         } else {
@@ -438,7 +526,7 @@ impl App {
                         let exists = notes.iter().position(|n| n.step == s && n.pitch == l);
                         match (paint, exists) {
                             (true, None) => {
-                                notes.push(Note { step: s, len: 1, pitch: l, vel: 100, slide: false });
+                                notes.push(Note { step: s, len: 1, pitch: l, vel: 100, slide: false, skip: 0 });
                                 changed = true;
                                 if pressed {
                                     self.send(Cmd::NoteOn { track, pitch: l, vel: 100 });
@@ -579,6 +667,16 @@ impl App {
                         let y = gr.top() + (top - n.pitch as f32) * ROW_H;
                         Rect::from_min_size(pos2(gr.left() + n.step as f32 * cell_w, y), vec2((n.len as f32 * cell_w - 1.0).max(3.0), ROW_H - 1.0))
                     };
+                    if self.roll.ghosts {
+                        for (n, gc) in self.ghost_notes(r, clip.len) {
+                            let nr = note_rect(&n);
+                            if nr.bottom() < gr.top() || nr.top() > gr.bottom() {
+                                continue;
+                            }
+                            p.rect_filled(nr, 1.0, gc.gamma_multiply(0.22));
+                            p.rect_stroke(nr, 1.0, Stroke::new(1.0_f32, gc.gamma_multiply(0.5)), egui::StrokeKind::Inside);
+                        }
+                    }
                     for (i, n) in clip.notes.iter().enumerate() {
                         let nr = note_rect(n);
                         if nr.bottom() < gr.top() || nr.top() > gr.bottom() {
@@ -586,7 +684,11 @@ impl App {
                         }
                         let sel = self.roll.selected == Some(i);
                         let t = n.vel as f32 / 127.0;
-                        p.rect_filled(nr, 1.0, lerp(darken(col, 0.4), col, t));
+                        let fill = lerp(darken(col, 0.4), col, t);
+                        p.rect_filled(nr, 1.0, if n.skip > 0 { fill.gamma_multiply(0.35 + 0.65 * (100 - n.skip) as f32 / 100.0) } else { fill });
+                        if n.skip > 0 && nr.width() > 22.0 {
+                            p.text(nr.left_center() + vec2(2.0, 0.0), Align2::LEFT_CENTER, format!("{}%", 100 - n.skip), FontId::proportional(8.5), Color32::BLACK);
+                        }
                         p.rect_stroke(nr, 1.0, Stroke::new(1.0_f32, if sel { Color32::WHITE } else { darken(col, 0.3) }), egui::StrokeKind::Inside);
                         if n.slide {
                             p.line_segment([nr.right_center(), nr.right_center() + vec2(cell_w * 0.5, 0.0)], Stroke::new(2.0_f32, col));
@@ -640,7 +742,14 @@ impl App {
                                     let step = step_at(pos.x).floor() as u32;
                                     let pitch = pitch_at(pos.y) as u8;
                                     if (step as usize) < steps {
-                                        notes.push(Note { step, len: self.roll.draw_len, pitch, vel: 100, slide: false });
+                                        if let Some(q) = self.roll.stamp {
+                                            for iv in CHORD_QUALITIES[q].1.iter().skip(1) {
+                                                if let Some(p2) = pitch.checked_add(*iv).filter(|p| *p <= 127) {
+                                                    notes.push(Note { step, len: self.roll.draw_len, pitch: p2, vel: 95, slide: false, skip: 0 });
+                                                }
+                                            }
+                                        }
+                                        notes.push(Note { step, len: self.roll.draw_len, pitch, vel: 100, slide: false, skip: 0 });
                                         let i = notes.len() - 1;
                                         self.roll.selected = Some(i);
                                         self.roll.drag = Some(NoteDrag::Move { idx: i, grab_step: step_at(pos.x) - step as f32, grab_pitch: 0 });

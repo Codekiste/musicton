@@ -54,7 +54,7 @@ Audio läuft über ALSA bzw. PipeWire/PulseAudio (Standardgerät). Ein angeschlo
 
 **Audio-Effekte (43):** Beat Mangler, Heat Stack, Hybrid Reverb, Transient Shaper, Maximizer, True Peak Limiter, Stereo Imager, Filter Sweep, Pan LFO, Stutter, Channel EQ, Chorus, Compressor, Body Resonator, Drum Shaper, Tube Drive, Echo, Parametric EQ (mit Kurve), DJ EQ, Degrader, Triple Delay, Flanger, Frequency Shifter, Gate, Bus Compressor, Grain Delay, Limiter, Multiband Compressor (Upward- und Downward-Kompression), Overdrive, Pedal, Phaser, Ping Pong Delay, Bitcrusher, Chord Resonator, Reverb, Saturator, Sidechain, Stereo Delay, Spectrum, Tuner, Utility, Vinyl, Vocoder
 
-**MIDI-Effekte:** Arpeggiator, Chord, Note Length, Pitch, Random, Scale, Velocity
+**MIDI-Effekte:** Arpeggiator, Chord, Note Length, Pitch, Random, Scale, Strum, Velocity
 
 **Audio:** Audiospuren mit Warp-Modi Beats (Time-Stretch), Re-Pitch und Off, automatische Tempo-Erkennung von Loops, Audio-Aufnahme vom Eingang (Spur scharf schalten ● + Record)
 
@@ -68,6 +68,16 @@ Audio läuft über ALSA bzw. PipeWire/PulseAudio (Standardgerät). Ein angeschlo
 - Maximizer: Lautheit per Lookahead-Limiter, optional mit warmer Vorsättigung
 - True Peak Limiter: 4-fach überabgetastete True-Peak-Erkennung, Loudness-Meter mit Momentary, Short-term und Integrated LUFS sowie True Peak
 - Stereo Imager: Stereobreite in drei Bändern (Mono-Bass, breite Höhen), Korrelationsanzeige
+
+**Komposition:**
+- Chord Track: Akkorde auf einer eigenen Spur über der Timeline. Ein Doppelklick fügt einen Akkord hinzu, der zur Tonart passt, ein Rechtsklick ändert Grundton und Typ.
+- Follow Chords: Spuren mit diesem Schalter biegen ihre Noten auf den nächsten Akkordton. So folgen eine Bassline oder ein Arpeggio jedem Akkordwechsel.
+- Chord Pads: Die Akkorde der Song-Tonart liegen auf 8 Pads, wahlweise mit Septimen, Oktave und Umkehrung. Was du auf den Pads spielst, nimmt Musicton mit auf.
+- Chord Stamps: Ein Klick in den Piano Roll setzt einen ganzen Akkord (Dur, Moll, 7, maj7, m7, sus, dim, aug, add9 …).
+- Strum (MIDI-Effekt): spielt die Töne eines Akkords nacheinander an wie auf einer Gitarre, aufwärts, abwärts, abwechselnd oder zufällig, mit Velocity-Verlauf.
+- Ghost Notes: blendet die Noten der anderen Spuren im Piano Roll ein.
+- Note Rules: Regel-Editor nach dem Muster „wenn Bedingung, dann Aktion“. Bedingungen sind Tonhöhe, Velocity, Länge, Position im Takt oder Beat und Notennummer. Aktionen sind Transponieren, Velocity, Länge, Chance, Löschen und Oktavdopplung. Dazu kommen fertige Presets.
+- Noten-Wahrscheinlichkeit: Jede Note hat eine Chance in Prozent und spielt nur bei manchen Durchläufen.
 
 **Arrangement-Workflow:**
 - Arranger-Spur: Song-Abschnitte (Intro, Build, Drop …) über der Timeline. Verschieben, Duplizieren und Löschen nimmt Clips und Automation mit.
@@ -119,7 +129,7 @@ Netzwerk-Tempo-Sync, Audio-to-MIDI, Clip-Hüllkurven und Tempo-Automation, Freez
 
 Musicton öffnet beim Start einen lokalen Steuer-Port (`127.0.0.1:47800`, nur lokal erreichbar; abschalten mit `MUSICTON_NO_REMOTE=1`, anderer Port mit `MUSICTON_PORT`). Der MCP-Server `musicton-mcp` übersetzt MCP-Tool-Aufrufe darauf. Claude Code findet ihn über die `.mcp.json` im Projektordner.
 
-Die 57 Tools decken ab:
+Die 61 Tools decken ab:
 - **Zustand:** Projekt, Spuren, Clips mit Noten, Devices mit allen Parametern, Meter
 - **Transport und Launch:** Abspielen, Stoppen, Clips und Szenen starten
 - **Bearbeiten:** Spuren, Clips, Noten, Devices, Parameter, Automation, Timeline

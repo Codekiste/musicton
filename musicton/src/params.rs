@@ -1334,3 +1334,12 @@ pub static SLICER_PARAMS: LazyLock<Vec<ParamDef>> = LazyLock::new(|| {
         ParamDef::new("Volume", 0.0, 1.0, 0.8, Unit::Pct),
     ]
 });
+
+pub static STRUM_PARAMS: LazyLock<Vec<ParamDef>> = LazyLock::new(|| {
+    vec![
+        ParamDef::new("Time", 0.0, 120.0, 25.0, Unit::Ms),
+        ParamDef::options("Direction", &["Up", "Down", "Alternate", "Random"], 0),
+        ParamDef::new("Vel Slope", -0.5, 0.5, -0.1, Unit::Pct),
+        ParamDef::new("Humanize", 0.0, 1.0, 0.1, Unit::Pct),
+    ]
+});

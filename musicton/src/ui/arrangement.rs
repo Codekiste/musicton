@@ -1,7 +1,7 @@
 //! Timeline: timeline with clips, loop brace and automation lanes.
 
 use super::theme::*;
-use super::arranger::{ArrangerState, MARK_H, SEC_H};
+use super::arranger::{ArrangerState, CHORD_H, MARK_H, SEC_H};
 use super::widgets;
 use super::{App, ClipRef, Detail, Payload, Sel};
 use crate::audio::engine::Cmd;
@@ -108,9 +108,10 @@ impl App {
         let full = ui.available_rect_before_wrap();
         ui.allocate_rect(full, Sense::hover());
         let ruler = Rect::from_min_max(pos2(full.left() + HEADER_W, full.top()), pos2(full.right(), full.top() + RULER_H));
-        let top_h = RULER_H + MARK_H + SEC_H;
+        let top_h = RULER_H + MARK_H + SEC_H + CHORD_H;
         let marks = Rect::from_min_max(pos2(ruler.left(), ruler.bottom()), pos2(ruler.right(), ruler.bottom() + MARK_H));
         let secs = Rect::from_min_max(pos2(ruler.left(), marks.bottom()), pos2(ruler.right(), marks.bottom() + SEC_H));
+        let chords = Rect::from_min_max(pos2(ruler.left(), secs.bottom()), pos2(ruler.right(), secs.bottom() + CHORD_H));
         let lanes = Rect::from_min_max(pos2(full.left() + HEADER_W, full.top() + top_h), full.max);
         let headers = Rect::from_min_max(pos2(full.left(), full.top() + top_h), pos2(full.left() + HEADER_W, full.bottom()));
         let pps = self.arr.pps;
@@ -228,6 +229,7 @@ impl App {
         self.ruler(ui, ruler, x_of);
         self.marker_strip(ui, marks, &x_of);
         self.section_lane(ui, secs, &x_of);
+        self.chord_lane(ui, chords, &x_of);
         // Corner with tools.
         let corner = Rect::from_min_max(full.min, pos2(full.left() + HEADER_W, full.top() + top_h));
         p.rect_filled(corner, 0.0, PANEL);

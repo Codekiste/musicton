@@ -124,7 +124,11 @@ fn param_value(def: &ParamDef, args: &Value) -> Result<f32, String> {
 }
 
 fn note_json(n: &Note) -> Value {
-    json!({ "step": n.step, "len": n.len, "pitch": n.pitch, "name": note_name(n.pitch), "vel": n.vel, "slide": n.slide })
+    let mut o = json!({ "step": n.step, "len": n.len, "pitch": n.pitch, "name": note_name(n.pitch), "vel": n.vel, "slide": n.slide });
+    if n.skip > 0 {
+        o["chance"] = json!(100 - n.skip as u32);
+    }
+    o
 }
 
 fn parse_notes(v: &Value) -> Result<Vec<Note>, String> {
@@ -137,6 +141,8 @@ fn parse_notes(v: &Value) -> Result<Vec<Note>, String> {
                 pitch: arg_u64(n, "pitch").ok_or("note needs 'pitch' (MIDI number; drum lane 0-9 on drum tracks)")?.min(127) as u8,
                 vel: arg_u64(n, "vel").unwrap_or(100).clamp(1, 127) as u8,
                 slide: arg_bool(n, "slide").unwrap_or(false),
+                // "chance" in percent (100 = always).
+                skip: 100 - arg_u64(n, "chance").unwrap_or(100).min(100) as u8,
             })
         })
         .collect()
@@ -403,6 +409,7 @@ impl App {
                     "clips": clips,
                     "devices": t.channel.devices.iter().map(device_json).collect::<Vec<_>>(),
                     "output": output_name(t.output, p),
+                    "follow_chords": t.follow_chords,
                     "modulators": t.modulators.iter().map(|m| json!({"id": m.id, "shape": m.shape.name(), "rate": m.rate, "synced": m.synced, "depth": m.depth, "target": m.target.map(|x| format!("{x:?}")), "on": m.on})).collect::<Vec<_>>(),
                     "midi_fx": t.midi_fx.iter().map(|m| json!({"id": m.id, "type": m.kind.name(), "on": m.on})).collect::<Vec<_>>(),
                     "arrangement_clips": t.arrangement.iter().map(|c| json!({"id": c.id, "name": c.clip.name, "start_bar": c.start as f32 / 16.0 + 1.0, "bars": c.len as f32 / 16.0})).collect::<Vec<_>>(),
@@ -424,6 +431,7 @@ impl App {
                 "markers": p.markers.iter().map(|m| json!({"id": m.id, "name": m.name, "bar": m.pos as f32 / 16.0 + 1.0})).collect::<Vec<_>>(),
                 "sections": p.sections.iter().map(|x| json!({"id": x.id, "name": x.name, "start_bar": x.start as f32 / 16.0 + 1.0, "bars": x.len as f32 / 16.0})).collect::<Vec<_>>(),
                 "chain": { "on": p.chain_on, "order": p.chain.iter().filter_map(|id| p.sections.iter().find(|x| x.id == *id).map(|x| x.name.clone())).collect::<Vec<_>>() },
+                "chords": p.chords.iter().map(|c| json!({"id": c.id, "name": c.name(), "start_bar": c.start as f32 / 16.0 + 1.0, "bars": c.len as f32 / 16.0})).collect::<Vec<_>>(),
                 "playlist": p.playlist.iter().map(|b| json!({"id": b.id, "scene": b.scene, "start_bar": b.start as f32 / 16.0 + 1.0, "bars": b.len as f32 / 16.0, "lane": b.lane})).collect::<Vec<_>>(),
                 "file": self.file.as_ref().map(|f| f.display().to_string()),
             },

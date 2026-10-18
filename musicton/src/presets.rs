@@ -509,7 +509,7 @@ const TH: u8 = 8;
 const PC: u8 = 9;
 
 fn n(step: u32, len: u32, pitch: u8, vel: u8) -> Note {
-    Note { step, len, pitch, vel, slide: false }
+    Note { step, len, pitch, vel, slide: false, skip: 0 }
 }
 fn hits(lane: u8, steps: &[u32], vel: u8) -> Vec<Note> {
     steps.iter().map(|&s| n(s, 1, lane, vel)).collect()
@@ -521,7 +521,7 @@ fn chord(step: u32, len: u32, pitches: &[u8], vel: u8) -> Vec<Note> {
     pitches.iter().map(|&p| n(step, len, p, vel)).collect()
 }
 fn acid(steps: &[(u32, u8, bool, bool)]) -> Vec<Note> {
-    steps.iter().map(|&(s, p, acc, slide)| Note { step: s, len: 1, pitch: p, vel: if acc { 120 } else { 90 }, slide }).collect()
+    steps.iter().map(|&(s, p, acc, slide)| Note { step: s, len: 1, pitch: p, vel: if acc { 120 } else { 90 }, slide, skip: 0 }).collect()
 }
 
 pub static PATTERNS: &[Pattern] = &[

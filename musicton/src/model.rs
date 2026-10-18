@@ -359,10 +359,11 @@ pub enum MidiFxKind {
     Random,
     Scale,
     Velocity,
+    Strum,
 }
 
 impl MidiFxKind {
-    pub const ALL: [MidiFxKind; 7] = [Self::Arpeggiator, Self::Chord, Self::NoteLength, Self::Pitch, Self::Random, Self::Scale, Self::Velocity];
+    pub const ALL: [MidiFxKind; 8] = [Self::Arpeggiator, Self::Chord, Self::NoteLength, Self::Pitch, Self::Random, Self::Scale, Self::Strum, Self::Velocity];
     pub fn name(self) -> &'static str {
         match self {
             Self::Arpeggiator => "Arpeggiator",
@@ -372,6 +373,7 @@ impl MidiFxKind {
             Self::Random => "Random",
             Self::Scale => "Scale",
             Self::Velocity => "Velocity",
+            Self::Strum => "Strum",
         }
     }
     pub fn info(self) -> &'static str {
@@ -383,6 +385,7 @@ impl MidiFxKind {
             Self::Random => "Randomly transposes notes - great for generative melodies.",
             Self::Scale => "Forces every note into the chosen key and scale. No wrong notes.",
             Self::Velocity => "Reshapes, limits or randomizes note velocities.",
+            Self::Strum => "Spreads the notes of a chord in time like a strummed guitar: up, down, alternating or random, with a velocity slope.",
         }
     }
     pub fn defs(self) -> &'static [ParamDef] {
@@ -394,6 +397,7 @@ impl MidiFxKind {
             Self::Random => &params::RANDOM_PARAMS,
             Self::Scale => &params::SCALE_PARAMS,
             Self::Velocity => &params::VELOCITY_PARAMS,
+            Self::Strum => &params::STRUM_PARAMS,
         }
     }
 }
@@ -670,6 +674,9 @@ pub struct Note {
     pub vel: u8,
     #[serde(default)]
     pub slide: bool,
+    /// Chance in percent that the note is skipped on a pass (0 = always plays).
+    #[serde(default)]
+    pub skip: u8,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
@@ -938,6 +945,9 @@ pub struct Track {
     pub output: Output,
     #[serde(default)]
     pub modulators: Vec<Modulator>,
+    /// Clip notes are bent to the nearest tone of the chord track's current chord.
+    #[serde(default)]
+    pub follow_chords: bool,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default, Serialize, Deserialize)]
@@ -1015,6 +1025,89 @@ pub struct Section {
     pub color: [u8; 3],
 }
 
+/// Chord qualities: name and intervals from the root.
+pub const CHORD_QUALITIES: &[(&str, &[u8])] = &[
+    ("", &[0, 4, 7]),
+    ("m", &[0, 3, 7]),
+    ("7", &[0, 4, 7, 10]),
+    ("maj7", &[0, 4, 7, 11]),
+    ("m7", &[0, 3, 7, 10]),
+    ("sus2", &[0, 2, 7]),
+    ("sus4", &[0, 5, 7]),
+    ("dim", &[0, 3, 6]),
+    ("aug", &[0, 4, 8]),
+    ("add9", &[0, 4, 7, 14]),
+    ("m9", &[0, 3, 7, 10, 14]),
+    ("5", &[0, 7]),
+];
+
+/// A chord on the chord track.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ChordEvent {
+    pub id: u64,
+    pub start: u32,
+    pub len: u32,
+    /// Pitch class 0-11 (C = 0).
+    pub root: u8,
+    /// Index into `CHORD_QUALITIES`.
+    pub quality: usize,
+}
+
+impl ChordEvent {
+    pub fn name(&self) -> String {
+        format!("{}{}", NOTE_NAMES[self.root as usize % 12], CHORD_QUALITIES[self.quality.min(CHORD_QUALITIES.len() - 1)].0)
+    }
+    pub fn intervals(&self) -> &'static [u8] {
+        CHORD_QUALITIES[self.quality.min(CHORD_QUALITIES.len() - 1)].1
+    }
+    /// Pitch classes of the chord.
+    pub fn classes(&self) -> Vec<u8> {
+        self.intervals().iter().map(|i| (self.root + i) % 12).collect()
+    }
+    /// Chord notes voiced upwards from `base` (MIDI).
+    pub fn voicing(&self, base: u8) -> Vec<u8> {
+        self.intervals().iter().map(|i| base.saturating_add(*i)).filter(|p| *p <= 127).collect()
+    }
+}
+
+/// Moves a pitch to the nearest chord tone (ties go down).
+pub fn snap_to_chord(pitch: u8, classes: &[u8]) -> u8 {
+    if classes.is_empty() {
+        return pitch;
+    }
+    for d in 0..12i32 {
+        for cand in [pitch as i32 - d, pitch as i32 + d] {
+            if (0..128).contains(&cand) && classes.contains(&((cand % 12) as u8)) {
+                return cand as u8;
+            }
+        }
+    }
+    pitch
+}
+
+/// Diatonic chord on scale degree `degree` (0-based) of a key/scale, stacking thirds.
+pub fn diatonic_chord(key: u8, scale: usize, degree: usize, sevenths: bool) -> (u8, usize) {
+    let steps = SCALES[scale.min(SCALES.len() - 1)].1;
+    let n = steps.len();
+    let pc = |k: usize| -> i32 { steps[k % n] as i32 + 12 * (k / n) as i32 };
+    let root = pc(degree);
+    let third = pc(degree + 2) - root;
+    let fifth = pc(degree + 4) - root;
+    let seventh = pc(degree + 6) - root;
+    let q = match (third, fifth, sevenths, seventh) {
+        (4, 7, false, _) => 0,
+        (3, 7, false, _) => 1,
+        (3, 6, _, _) => 7,
+        (4, 8, _, _) => 8,
+        (4, 7, true, 10) => 2,
+        (4, 7, true, _) => 3,
+        (3, 7, true, _) => 4,
+        (2, 7, _, _) => 5,
+        _ => 0,
+    };
+    (((key as i32 + root).rem_euclid(12)) as u8, q)
+}
+
 /// A pattern (scene) placed on the playlist.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PlaylistBlock {
@@ -1067,6 +1160,8 @@ pub struct Project {
     pub chain_on: bool,
     #[serde(default)]
     pub playlist: Vec<PlaylistBlock>,
+    #[serde(default)]
+    pub chords: Vec<ChordEvent>,
 }
 
 fn default_key() -> u8 {
@@ -1147,6 +1242,7 @@ impl Project {
             chain: vec![],
             chain_on: false,
             playlist: vec![],
+            chords: vec![],
         }
     }
 
@@ -1263,6 +1359,11 @@ impl Project {
         self.chain.retain(|c| *c != id);
     }
 
+    /// Chord on the chord track at a timeline position.
+    pub fn chord_at(&self, pos: u32) -> Option<&ChordEvent> {
+        self.chords.iter().find(|c| pos >= c.start && pos < c.start + c.len)
+    }
+
     /// Content end of the playlist in steps.
     pub fn playlist_end(&self) -> u32 {
         self.playlist.iter().map(|b| b.start + b.len).max().unwrap_or(0)
@@ -1296,6 +1397,7 @@ impl Project {
             folded: false,
             output: Output::Master,
             modulators: vec![],
+            follow_chords: false,
         });
         id
     }
@@ -1435,4 +1537,219 @@ fn normalize_devices(devs: &mut [Device], max_id: &mut u64) {
 
 fn contains_device(devs: &[Device], id: u64) -> bool {
     devs.iter().any(|d| d.id == id || d.chains.iter().any(|c| contains_device(&c.devices, id)))
+}
+
+// ---------------------------------------------------------------------------------------------
+// Note rules: condition -> action transforms for clips.
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum RuleField {
+    All,
+    Pitch,
+    Velocity,
+    Length,
+    /// Position within the bar (0-15).
+    StepInBar,
+    /// Position within the beat (0-3: 0 = on the beat, 2 = off-beat 8th).
+    StepInBeat,
+    /// Index of the note in time order.
+    Index,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum RuleOp {
+    Equal,
+    Less,
+    Greater,
+    Between,
+    /// value % a == b
+    EveryNth,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum RuleAction {
+    Transpose,
+    SetVelocity,
+    AddVelocity,
+    ScaleVelocity,
+    RandomVelocity,
+    SetLength,
+    ScaleLength,
+    SetChance,
+    Delete,
+    AddOctave,
+}
+
+impl RuleField {
+    pub const ALL: [RuleField; 7] = [Self::All, Self::Pitch, Self::Velocity, Self::Length, Self::StepInBar, Self::StepInBeat, Self::Index];
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::All => "All notes",
+            Self::Pitch => "Pitch",
+            Self::Velocity => "Velocity",
+            Self::Length => "Length",
+            Self::StepInBar => "Step in bar",
+            Self::StepInBeat => "Step in beat",
+            Self::Index => "Note number",
+        }
+    }
+}
+
+impl RuleOp {
+    pub const ALL: [RuleOp; 5] = [Self::Equal, Self::Less, Self::Greater, Self::Between, Self::EveryNth];
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Equal => "=",
+            Self::Less => "<",
+            Self::Greater => ">",
+            Self::Between => "between",
+            Self::EveryNth => "every",
+        }
+    }
+}
+
+impl RuleAction {
+    pub const ALL: [RuleAction; 10] = [
+        Self::Transpose,
+        Self::SetVelocity,
+        Self::AddVelocity,
+        Self::ScaleVelocity,
+        Self::RandomVelocity,
+        Self::SetLength,
+        Self::ScaleLength,
+        Self::SetChance,
+        Self::Delete,
+        Self::AddOctave,
+    ];
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Transpose => "Transpose (st)",
+            Self::SetVelocity => "Set velocity",
+            Self::AddVelocity => "Add velocity",
+            Self::ScaleVelocity => "Scale velocity (%)",
+            Self::RandomVelocity => "Randomize velocity (+/-)",
+            Self::SetLength => "Set length (steps)",
+            Self::ScaleLength => "Scale length (%)",
+            Self::SetChance => "Set chance (%)",
+            Self::Delete => "Delete",
+            Self::AddOctave => "Add octave (st)",
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct NoteRule {
+    pub field: RuleField,
+    pub op: RuleOp,
+    pub a: i32,
+    pub b: i32,
+    pub action: RuleAction,
+    pub value: i32,
+}
+
+impl NoteRule {
+    pub fn new(field: RuleField, op: RuleOp, a: i32, b: i32, action: RuleAction, value: i32) -> Self {
+        Self { field, op, a, b, action, value }
+    }
+}
+
+/// Ready-made rule sets: name and rules.
+pub fn rule_presets() -> Vec<(&'static str, Vec<NoteRule>)> {
+    use RuleAction as A;
+    use RuleField as F;
+    use RuleOp as O;
+    vec![
+        ("Humanize velocity", vec![NoteRule::new(F::All, O::Equal, 0, 0, A::RandomVelocity, 12)]),
+        ("Accent the beats", vec![NoteRule::new(F::StepInBeat, O::Equal, 0, 0, A::AddVelocity, 20), NoteRule::new(F::StepInBeat, O::Greater, 0, 0, A::AddVelocity, -12)]),
+        ("Thin out off-beats", vec![NoteRule::new(F::StepInBeat, O::Greater, 0, 0, A::SetChance, 60)]),
+        ("Remove ghost notes", vec![NoteRule::new(F::Velocity, O::Less, 40, 0, A::Delete, 0)]),
+        ("Octave up above C4", vec![NoteRule::new(F::Pitch, O::Greater, 71, 0, A::Transpose, 12)]),
+        ("Staccato", vec![NoteRule::new(F::All, O::Equal, 0, 0, A::ScaleLength, 50)]),
+        ("Double low notes an octave down", vec![NoteRule::new(F::Pitch, O::Less, 48, 0, A::AddOctave, -12)]),
+        ("Every 4th note louder", vec![NoteRule::new(F::Index, O::EveryNth, 4, 0, A::AddVelocity, 25)]),
+    ]
+}
+
+/// Applies rules in order to a clip's notes; returns how many notes were touched.
+pub fn apply_rules(notes: &mut Vec<Note>, rules: &[NoteRule], seed: u32) -> usize {
+    let mut rng = seed | 1;
+    let mut touched = 0;
+    for rule in rules {
+        notes.sort_by_key(|n| (n.step, n.pitch));
+        let mut out = Vec::with_capacity(notes.len());
+        for (idx, n) in notes.iter().enumerate() {
+            let v = match rule.field {
+                RuleField::All => 0,
+                RuleField::Pitch => n.pitch as i32,
+                RuleField::Velocity => n.vel as i32,
+                RuleField::Length => n.len as i32,
+                RuleField::StepInBar => (n.step % 16) as i32,
+                RuleField::StepInBeat => (n.step % 4) as i32,
+                RuleField::Index => idx as i32,
+            };
+            let hit = rule.field == RuleField::All
+                || match rule.op {
+                    RuleOp::Equal => v == rule.a,
+                    RuleOp::Less => v < rule.a,
+                    RuleOp::Greater => v > rule.a,
+                    RuleOp::Between => v >= rule.a.min(rule.b) && v <= rule.a.max(rule.b),
+                    RuleOp::EveryNth => rule.a > 0 && v.rem_euclid(rule.a) == rule.b.rem_euclid(rule.a.max(1)),
+                };
+            if !hit {
+                out.push(*n);
+                continue;
+            }
+            touched += 1;
+            let mut m = *n;
+            let vel = |x: i32| x.clamp(1, 127) as u8;
+            match rule.action {
+                RuleAction::Transpose => m.pitch = (m.pitch as i32 + rule.value).clamp(0, 127) as u8,
+                RuleAction::SetVelocity => m.vel = vel(rule.value),
+                RuleAction::AddVelocity => m.vel = vel(m.vel as i32 + rule.value),
+                RuleAction::ScaleVelocity => m.vel = vel(m.vel as i32 * rule.value / 100),
+                RuleAction::RandomVelocity => {
+                    rng ^= rng << 13;
+                    rng ^= rng >> 17;
+                    rng ^= rng << 5;
+                    let span = rule.value.abs() * 2 + 1;
+                    m.vel = vel(m.vel as i32 + (rng % span as u32) as i32 - rule.value.abs());
+                }
+                RuleAction::SetLength => m.len = rule.value.max(1) as u32,
+                RuleAction::ScaleLength => m.len = ((m.len as i32 * rule.value + 50) / 100).max(1) as u32,
+                RuleAction::SetChance => m.skip = (100 - rule.value.clamp(0, 100)) as u8,
+                RuleAction::Delete => continue,
+                RuleAction::AddOctave => {
+                    out.push(m);
+                    m.pitch = (m.pitch as i32 + rule.value).clamp(0, 127) as u8;
+                }
+            }
+            out.push(m);
+        }
+        *notes = out;
+    }
+    notes.sort_by_key(|n| (n.step, n.pitch));
+    touched
+}
+
+/// Parses chord names like "Am", "F#m7", "Bbmaj7", "Dsus4", "G" into (root, quality index).
+pub fn parse_chord(name: &str) -> Option<(u8, usize)> {
+    let s = name.trim();
+    let mut chars = s.chars();
+    let letter = chars.next()?.to_ascii_uppercase();
+    let base = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"].iter().position(|n| *n == letter.to_string())? as i32;
+    let rest: String = chars.collect();
+    let (shift, qual) = if let Some(r) = rest.strip_prefix('#') {
+        (1, r)
+    } else if let Some(r) = rest.strip_prefix('b') {
+        (-1, r)
+    } else {
+        (0, rest.as_str())
+    };
+    let qual = match qual {
+        "" | "maj" | "M" => "",
+        "min" | "-" => "m",
+        q => q,
+    };
+    let q = CHORD_QUALITIES.iter().position(|(n, _)| *n == qual)?;
+    Some(((base + shift).rem_euclid(12) as u8, q))
 }

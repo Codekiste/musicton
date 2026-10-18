@@ -67,7 +67,7 @@ pub fn steps_to_notes(steps: &[Step]) -> Vec<crate::model::Note> {
     let mut out: Vec<crate::model::Note> = vec![];
     for (i, st) in steps.iter().enumerate() {
         match st.time {
-            StepTime::Note => out.push(crate::model::Note { step: i as u32, len: 1, pitch: st.pitch, vel: if st.accent { 120 } else { 90 }, slide: st.slide }),
+            StepTime::Note => out.push(crate::model::Note { step: i as u32, len: 1, pitch: st.pitch, vel: if st.accent { 120 } else { 90 }, slide: st.slide, skip: 0 }),
             StepTime::Tie => {
                 if let Some(last) = out.last_mut() {
                     if last.step + last.len == i as u32 {

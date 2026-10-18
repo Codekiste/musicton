@@ -9,6 +9,7 @@ use egui::{pos2, vec2, Align2, Color32, FontId, Rect, Sense, Stroke, UiBuilder};
 
 pub const MARK_H: f32 = 15.0;
 pub const SEC_H: f32 = 21.0;
+pub const CHORD_H: f32 = 19.0;
 pub const PL_LANES: u32 = 8;
 pub const PL_LANE_H: f32 = 40.0;
 
@@ -19,6 +20,8 @@ enum Drag {
     Marker { id: u64 },
     Block { id: u64, grab: f32 },
     BlockEnd { id: u64 },
+    Chord { id: u64, grab: f32 },
+    ChordEnd { id: u64 },
 }
 
 #[derive(Default)]
@@ -253,6 +256,106 @@ impl App {
         }
     }
 
+    /// Chord track: chords on the timeline that drive "Follow Chords" tracks.
+    pub(super) fn chord_lane(&mut self, ui: &mut egui::Ui, r: Rect, x_of: &dyn Fn(f32, f32) -> f32) {
+        let p = ui.painter().with_clip_rect(r);
+        let sx = self.arr.scroll_x;
+        let pps = self.arr.pps;
+        p.rect_filled(r, 0.0, PANEL_DARK);
+        p.line_segment([r.left_bottom(), r.right_bottom()], Stroke::new(1.0_f32, LINE));
+        let resp = ui.interact(r, ui.id().with("chords"), Sense::click_and_drag());
+        let pos = resp.interact_pointer_pos().or(resp.hover_pos());
+        let alt = ui.input(|i| i.modifiers.alt);
+        let mut hit = None;
+        let mut edge = false;
+        for c in &self.project.chords {
+            let cr = Rect::from_x_y_ranges(x_of(c.start as f32, sx)..=x_of((c.start + c.len) as f32, sx) - 1.0, r.top() + 2.0..=r.bottom() - 2.0);
+            p.rect_filled(cr, 3.0, Color32::from_rgb(0x4a, 0x56, 0x6e));
+            p.text(pos2(cr.left() + 4.0, cr.center().y), Align2::LEFT_CENTER, c.name(), FontId::proportional(11.0), TEXT);
+            if let Some(q) = pos {
+                if cr.contains(q) {
+                    hit = Some(c.id);
+                    edge = (q.x - cr.right()).abs() < 6.0;
+                }
+            }
+        }
+        if self.project.chords.is_empty() {
+            p.text(pos2(r.left() + 6.0, r.center().y), Align2::LEFT_CENTER, "Chords - double-click to add", FontId::proportional(10.0), TEXT_DIM);
+        }
+        if let Some(q) = pos {
+            let step = (q.x - r.left()) / pps + sx;
+            if resp.drag_started() {
+                if let Some(id) = hit {
+                    let c = self.project.chords.iter().find(|c| c.id == id).unwrap();
+                    self.arr.ext.drag = Some(if edge { Drag::ChordEnd { id } } else { Drag::Chord { id, grab: step - c.start as f32 } });
+                }
+            }
+            if resp.dragged() {
+                match self.arr.ext.drag {
+                    Some(Drag::Chord { id, grab }) => {
+                        let s = self.snap(step - grab, alt);
+                        if let Some(c) = self.project.chords.iter_mut().find(|c| c.id == id) {
+                            c.start = s;
+                        }
+                        self.touch();
+                    }
+                    Some(Drag::ChordEnd { id }) => {
+                        let e = self.snap(step, alt);
+                        if let Some(c) = self.project.chords.iter_mut().find(|c| c.id == id) {
+                            c.len = e.saturating_sub(c.start).max(4);
+                        }
+                        self.touch();
+                    }
+                    _ => {}
+                }
+            }
+            if resp.double_clicked() && hit.is_none() {
+                // Cycle through a classic progression: I - VI - IV - V.
+                let start = ((step / 16.0).floor() * 16.0).max(0.0) as u32;
+                let deg = [0usize, 5, 3, 4][self.project.chords.len() % 4];
+                let scale = if SCALES[self.project.scale.min(SCALES.len() - 1)].1.len() == 7 { self.project.scale } else { 2 };
+                let (root, q) = diatonic_chord(self.project.key, scale, deg, false);
+                self.add_chord_event(start, 16, root, q);
+            }
+        }
+        if resp.drag_stopped() {
+            self.arr.ext.drag = None;
+            self.project.chords.sort_by_key(|c| c.start);
+        }
+        if let Some(id) = hit {
+            resp.context_menu(|ui| {
+                let Some(c) = self.project.chords.iter_mut().find(|c| c.id == id) else { return };
+                ui.label("Root");
+                ui.horizontal_wrapped(|ui| {
+                    ui.set_max_width(220.0);
+                    for (k, n) in NOTE_NAMES.iter().enumerate() {
+                        if ui.selectable_label(c.root as usize == k, *n).clicked() {
+                            c.root = k as u8;
+                            self.changed = true;
+                        }
+                    }
+                });
+                ui.label("Quality");
+                ui.horizontal_wrapped(|ui| {
+                    ui.set_max_width(220.0);
+                    for (k, (n, _)) in CHORD_QUALITIES.iter().enumerate() {
+                        if ui.selectable_label(c.quality == k, if n.is_empty() { "maj" } else { n }).clicked() {
+                            c.quality = k;
+                            self.changed = true;
+                        }
+                    }
+                });
+                ui.separator();
+                if ui.button("Delete chord").clicked() {
+                    self.project.chords.retain(|c| c.id != id);
+                    self.touch();
+                    ui.close_menu();
+                }
+            });
+        }
+        self.hint(&resp, "Chord Track", "The song's chords. Double-click to add one (I-VI-IV-V of the key), drag to move, drag the edge to resize, right-click to change root and quality. Tracks with 'Follow Chords' bend their notes to the current chord.");
+    }
+
     /// Chain editor and playlist toggle, shown in the timeline's corner.
     pub(super) fn arranger_tools(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
@@ -261,6 +364,11 @@ impl App {
                 self.arr.ext.playlist = !self.arr.ext.playlist;
             }
             self.hint(&r, "Playlist", "Switches the lanes to the pattern playlist: place scenes as blocks on free lanes. The timeline plays a block's clips wherever a track has no timeline clip.");
+            let r = widgets::toggle(ui, "Pads", self.chord_pads.open, ACCENT, vec2(38.0, 18.0));
+            if r.clicked() {
+                self.chord_pads.open = !self.chord_pads.open;
+            }
+            self.hint(&r, "Chord Pads", "Opens the chord pads: the chords of the song key on eight pads, played on the selected track.");
             let r = widgets::toggle(ui, "Chain", self.project.chain_on, ACCENT, vec2(44.0, 18.0));
             if r.clicked() {
                 self.project.chain_on = !self.project.chain_on;

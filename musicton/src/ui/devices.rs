@@ -29,7 +29,12 @@ impl App {
                     ui.painter().rect_filled(r, 2.0, color);
                 });
                 ui.vertical(|ui| {
-                    ui.label(RichText::new(title).strong());
+                    ui.horizontal(|ui| {
+                        ui.label(RichText::new(title).strong());
+                        if let Sel::Track(id) = sel {
+                            self.follow_chords_toggle(ui, id);
+                        }
+                    });
                     ui.horizontal_top(|ui| {
                         if let Sel::Track(id) = sel {
                             self.macro_panel(ui, id);
