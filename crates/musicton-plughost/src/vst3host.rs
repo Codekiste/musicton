@@ -140,9 +140,121 @@ impl IHostApplicationTrait for HostApp {
         dst[..n.len()].copy_from_slice(&n);
         kResultOk
     }
-    unsafe fn createInstance(&self, _cid: *mut TUID, _iid: *mut TUID, obj: *mut *mut c_void) -> tresult {
+    /// Plug-ins create messages through the host to talk between component and controller.
+    unsafe fn createInstance(&self, _cid: *mut TUID, iid: *mut TUID, obj: *mut *mut c_void) -> tresult {
         *obj = null_mut();
+        let want = std::slice::from_raw_parts(iid as *const u8, 16);
+        if want == &IMessage::IID[..] {
+            let m = ComWrapper::new(Message { id: RefCell::new(std::ffi::CString::default()), attrs: ComWrapper::new(AttrList { map: RefCell::new(Default::default()) }) });
+            *obj = m.to_com_ptr::<IMessage>().unwrap().into_raw() as *mut c_void;
+            return kResultOk;
+        }
+        if want == &IAttributeList::IID[..] {
+            let a = ComWrapper::new(AttrList { map: RefCell::new(Default::default()) });
+            *obj = a.to_com_ptr::<IAttributeList>().unwrap().into_raw() as *mut c_void;
+            return kResultOk;
+        }
         kNotImplemented
+    }
+}
+
+enum AttrVal {
+    Int(i64),
+    Float(f64),
+    Str(Vec<u16>),
+    Bin(Vec<u8>),
+}
+
+struct AttrList {
+    map: RefCell<std::collections::HashMap<String, AttrVal>>,
+}
+impl Class for AttrList {
+    type Interfaces = (IAttributeList,);
+}
+impl IAttributeListTrait for AttrList {
+    unsafe fn setInt(&self, id: IAttributeList_::AttrID, v: int64) -> tresult {
+        self.map.borrow_mut().insert(CStr::from_ptr(id).to_string_lossy().into_owned(), AttrVal::Int(v));
+        kResultOk
+    }
+    unsafe fn getInt(&self, id: IAttributeList_::AttrID, v: *mut int64) -> tresult {
+        match self.map.borrow().get(CStr::from_ptr(id).to_string_lossy().as_ref()) {
+            Some(AttrVal::Int(x)) => {
+                *v = *x;
+                kResultOk
+            }
+            _ => kResultFalse,
+        }
+    }
+    unsafe fn setFloat(&self, id: IAttributeList_::AttrID, v: f64) -> tresult {
+        self.map.borrow_mut().insert(CStr::from_ptr(id).to_string_lossy().into_owned(), AttrVal::Float(v));
+        kResultOk
+    }
+    unsafe fn getFloat(&self, id: IAttributeList_::AttrID, v: *mut f64) -> tresult {
+        match self.map.borrow().get(CStr::from_ptr(id).to_string_lossy().as_ref()) {
+            Some(AttrVal::Float(x)) => {
+                *v = *x;
+                kResultOk
+            }
+            _ => kResultFalse,
+        }
+    }
+    unsafe fn setString(&self, id: IAttributeList_::AttrID, s: *const TChar) -> tresult {
+        let mut v = vec![];
+        let mut i = 0;
+        while *s.add(i) != 0 {
+            v.push(*s.add(i) as u16);
+            i += 1;
+        }
+        self.map.borrow_mut().insert(CStr::from_ptr(id).to_string_lossy().into_owned(), AttrVal::Str(v));
+        kResultOk
+    }
+    unsafe fn getString(&self, id: IAttributeList_::AttrID, s: *mut TChar, size: uint32) -> tresult {
+        match self.map.borrow().get(CStr::from_ptr(id).to_string_lossy().as_ref()) {
+            Some(AttrVal::Str(v)) => {
+                let cap = (size as usize / 2).saturating_sub(1);
+                let n = v.len().min(cap);
+                for (k, c) in v.iter().take(n).enumerate() {
+                    *s.add(k) = *c as TChar;
+                }
+                *s.add(n) = 0;
+                kResultOk
+            }
+            _ => kResultFalse,
+        }
+    }
+    unsafe fn setBinary(&self, id: IAttributeList_::AttrID, data: *const c_void, size: uint32) -> tresult {
+        let b = std::slice::from_raw_parts(data as *const u8, size as usize).to_vec();
+        self.map.borrow_mut().insert(CStr::from_ptr(id).to_string_lossy().into_owned(), AttrVal::Bin(b));
+        kResultOk
+    }
+    unsafe fn getBinary(&self, id: IAttributeList_::AttrID, data: *mut *const c_void, size: *mut uint32) -> tresult {
+        match self.map.borrow().get(CStr::from_ptr(id).to_string_lossy().as_ref()) {
+            Some(AttrVal::Bin(b)) => {
+                *data = b.as_ptr() as *const c_void;
+                *size = b.len() as uint32;
+                kResultOk
+            }
+            _ => kResultFalse,
+        }
+    }
+}
+
+struct Message {
+    id: RefCell<std::ffi::CString>,
+    attrs: ComWrapper<AttrList>,
+}
+impl Class for Message {
+    type Interfaces = (IMessage,);
+}
+impl IMessageTrait for Message {
+    unsafe fn getMessageID(&self) -> FIDString {
+        self.id.borrow().as_ptr()
+    }
+    unsafe fn setMessageID(&self, id: FIDString) {
+        *self.id.borrow_mut() = if id.is_null() { Default::default() } else { CStr::from_ptr(id).to_owned() };
+    }
+    unsafe fn getAttributes(&self) -> *mut IAttributeList {
+        self.attrs.as_com_ref::<IAttributeList>().map(|r| r.as_ptr()).unwrap_or(null_mut())
     }
 }
 
@@ -385,6 +497,7 @@ pub struct Vst3Plugin {
     has_in: bool,
     pending: Vec<(u32, f64)>,
     name: String,
+    connection: Option<(ComPtr<IConnectionPoint>, ComPtr<IConnectionPoint>)>,
     // Kept last so the library outlives every interface above.
     _module: Module,
 }
@@ -426,6 +539,15 @@ impl Vst3Plugin {
                     ctrl
                 }
             };
+            // Separate component and controller talk through connection points.
+            let mut connection = None;
+            if let (true, Some(c)) = (separate, &controller) {
+                if let (Some(a), Some(b)) = (component.cast::<IConnectionPoint>(), c.cast::<IConnectionPoint>()) {
+                    a.connect(b.as_ptr());
+                    b.connect(a.as_ptr());
+                    connection = Some((a, b));
+                }
+            }
             let handler = ComWrapper::new(Handler { changes: RefCell::new(vec![]) });
             if let Some(c) = &controller {
                 c.setComponentHandler(handler.to_com_ptr::<IComponentHandler>().unwrap().as_ptr());
@@ -486,6 +608,7 @@ impl Vst3Plugin {
                 has_in: n_in > 0,
                 pending: vec![],
                 name: name.clone(),
+                connection,
                 _module: module,
             };
             let params = p.param_infos();
@@ -709,6 +832,10 @@ impl Drop for Vst3Plugin {
             }
             self.processor.setProcessing(0);
             self.component.setActive(0);
+            if let Some((a, b)) = self.connection.take() {
+                a.disconnect(b.as_ptr());
+                b.disconnect(a.as_ptr());
+            }
             if let Some(c) = &self.controller {
                 c.setComponentHandler(null_mut());
                 if self.separate_controller {

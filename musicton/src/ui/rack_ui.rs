@@ -162,6 +162,8 @@ impl App {
             .show(ui, |ui| {
                 ui.vertical(|ui| {
                     ui.set_min_height(200.0);
+                    // Fixed width: separators would otherwise stretch the panel across the chain.
+                    ui.set_width(if mods.is_empty() { 110.0 } else { 300.0 });
                     ui.label(RichText::new("Modulators").strong().color(TEXT_DIM));
                     for (i, m) in mods.iter_mut().enumerate() {
                         ui.horizontal(|ui| {

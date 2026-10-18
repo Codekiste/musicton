@@ -5,6 +5,10 @@ Das B-303-Plugin hat einen eigenen Changelog: [b303-plugin/CHANGELOG.md](b303-pl
 
 ## [Unreleased]
 
+### Behoben
+- VST3-Plug-ins mit getrenntem Controller (z. B. Surge XT) zeigen ihren Editor: Component und Controller werden über Connection Points verbunden, der Host stellt Nachrichten (IMessage/IAttributeList) bereit
+- Das Modulator-Panel dehnt sich nicht mehr über die ganze Device Chain aus
+
 ## [0.1.0] - 2026-10-18
 
 Erste öffentliche Vorabversion.
